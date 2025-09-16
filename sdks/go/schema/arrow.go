@@ -7,7 +7,7 @@ import (
 
 	"github.com/apache/arrow/go/v18/arrow"
 	"github.com/apache/arrow/go/v18/arrow/ipc"
-	connectorv1 "github.com/data-power-io/noesis-connectors/pkg/v1"
+	connectorv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
 )
 
 // ArrowSchemaManager provides utilities for working with Apache Arrow schemas

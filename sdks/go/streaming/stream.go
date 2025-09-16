@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow/go/v18/arrow"
 	"github.com/apache/arrow/go/v18/arrow/array"
 	"github.com/apache/arrow/go/v18/arrow/memory"
-	connectorv1 "github.com/data-power-io/noesis-connectors/sdks/go/gen/connector/v1"
+	connectorv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
 	"go.uber.org/zap"
 )
 

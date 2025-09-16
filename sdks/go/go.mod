@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/apache/arrow/go/v18 v18.0.0-20241007013041-ab95a4d25142
+	github.com/data-power-io/noesis-protocol/languages/go v1.0.0
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.71.0
 )
@@ -24,6 +25,9 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 )
+
+// Use local development version of noesis-protocol
+replace github.com/data-power-io/noesis-protocol/languages/go => ../../../noesis-protocol/languages/go

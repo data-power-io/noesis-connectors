@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	connectorv1 "github.com/data-power-io/noesis-connectors/pkg/v1"
+	connectorv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
 )
 
 // Manager provides utilities for cursor management
