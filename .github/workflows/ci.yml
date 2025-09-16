@@ -39,15 +39,19 @@ jobs:
           ${{ runner.os }}-go-${{ matrix.go-version }}-
 
     - name: Install dependencies
+      working-directory: sdks/go
       run: go mod download
 
     - name: Install tools
+      working-directory: sdks/go
       run: make install-tools
 
     - name: Generate protobuf
+      working-directory: sdks/go
       run: make proto
 
     - name: Format check
+      working-directory: sdks/go
       run: |
         go fmt ./...
         if [[ $(git status --porcelain) ]]; then
@@ -56,21 +60,25 @@ jobs:
         fi
 
     - name: Vet
+      working-directory: sdks/go
       run: go vet ./...
 
     - name: Lint
+      working-directory: sdks/go
       run: golangci-lint run
 
     - name: Build
+      working-directory: sdks/go
       run: go build ./...
 
     - name: Test
+      working-directory: sdks/go
       run: go test -v -race -coverprofile=coverage.out ./...
 
     - name: Upload coverage
       uses: codecov/codecov-action@v4
       with:
-        file: ./coverage.out
+        file: ./sdks/go/coverage.out
         flags: go
 
   python:

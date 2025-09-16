@@ -17,9 +17,7 @@ class ConnectorHandler(ABC):
     """Abstract base class for connector implementations."""
 
     @abstractmethod
-    async def check_connection(
-        self, config: Dict[str, str]
-    ) -> None:
+    async def check_connection(self, config: Dict[str, str]) -> None:
         """Validate the connector configuration and connectivity.
 
         Args:
