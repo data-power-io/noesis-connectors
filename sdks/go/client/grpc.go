@@ -42,7 +42,6 @@ type SessionInfo struct {
 // ConnectionPool manages gRPC connection pooling
 type ConnectionPool struct {
 	connections map[string]*grpc.ClientConn
-	mu          sync.RWMutex
 	maxIdle     time.Duration
 	maxConns    int
 }
@@ -78,8 +77,6 @@ func NewGRPCClient(config *ClientConfig, logger *zap.Logger) (*GRPCClient, error
 	// Configure connection options
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: Add TLS support
-		grpc.WithBlock(),
-		grpc.WithTimeout(config.ConnectionTimeout),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                config.KeepAliveTime,
 			Timeout:             config.KeepAliveTimeout,
@@ -90,9 +87,19 @@ func NewGRPCClient(config *ClientConfig, logger *zap.Logger) (*GRPCClient, error
 		grpc.WithStreamInterceptor(streamRetryInterceptor(config.MaxRetries, config.RetryDelay, logger)),
 	}
 
-	conn, err := grpc.Dial(config.Address, opts...)
+	// Use context with timeout for connection
+	ctx, cancel := context.WithTimeout(context.Background(), config.ConnectionTimeout)
+	defer cancel()
+
+	conn, err := grpc.NewClient(config.Address, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to connector at %s: %w", config.Address, err)
+		return nil, fmt.Errorf("failed to create connector client for %s: %w", config.Address, err)
+	}
+
+	// Wait for connection to be ready
+	if !conn.WaitForStateChange(ctx, connectivity.Idle) {
+		_ = conn.Close()
+		return nil, fmt.Errorf("failed to connect to connector at %s: timeout", config.Address)
 	}
 
 	client := connectorv1.NewConnectorClient(conn)
