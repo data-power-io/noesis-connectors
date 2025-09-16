@@ -1,0 +1,72 @@
+{
+  "name": "@noesis/connectors",
+  "version": "1.0.0",
+  "description": "Node.js SDK for building Noesis data connectors",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "data",
+    "connectors",
+    "grpc",
+    "streaming",
+    "noesis"
+  ],
+  "author": "Noesis Team <team@noesis.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/data-power-io/noesis-connectors.git",
+    "directory": "sdks/node"
+  },
+  "bugs": {
+    "url": "https://github.com/data-power-io/noesis-connectors/issues"
+  },
+  "homepage": "https://docs.noesis.dev/connectors",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/proto-loader": "^0.7.0",
+    "apache-arrow": "^14.0.0",
+    "google-protobuf": "^3.21.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/google-protobuf": "^3.15.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.8.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.2.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

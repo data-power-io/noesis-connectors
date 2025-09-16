@@ -1,0 +1,326 @@
+// Connector API (gRPC) — with explicit Discovery phase
+// ----------------------------------------------------
+// Goal:
+// - Standardize how a runner talks to a source-specific connector.
+// - Support three read modes: FullTable, ChangeStream, Subgraph (graph walk, PLM-friendly).
+// - Treat LINKS as first-class entities (with attributes), just like NODES.
+//
+// Notes:
+// - All data records (both NODEs and LINKs) are emitted via the same RecordMsg.
+// - Discovery describes the platform, entities, schemas, keys, and per-entity extraction capabilities.
+// - Cursors are opaque (connector-defined) but must be stable for resume.
+// - Schemas can be provided as Arrow IPC (preferred) or JSON/Avro.
+// - Exactly-once end-to-end is a responsibility shared with the runner (Kafka transactions, checkpoints).
+
+syntax = "proto3";
+
+package connector.v1;
+option go_package = "github.com/data-power-io/noesis-connectors/pkg/v1;connectorv1";
+
+// ===========================
+//         SERVICE
+// ===========================
+service Connector {
+  // Light-weight connectivity check (auth/scopes/quota/basic latency).
+  rpc Check(CheckRequest) returns (CheckResponse);
+
+  // *** Discovery ***: describe the platform and all available entities, their schemas,
+  // keys, and which extraction modes each entity supports.
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
+
+  // Open a logical reading session (optional; good place to validate config, pin snapshots, warm caches).
+  rpc Open(OpenRequest) returns (OpenResponse);
+
+  // Start streaming data according to a plan (full table / change stream / subgraph).
+  rpc Read(ReadRequest) returns (stream ReadMessage);
+
+  // Close the session cleanly.
+  rpc Close(CloseRequest) returns (CloseResponse);
+}
+
+// ===========================
+//         DISCOVERY
+// ===========================
+
+message DiscoverRequest {
+  string tenant_id = 1;                 // For multi-tenant scoping and audit.
+  repeated string entity_filter = 2;    // Optional: restrict discovery to these entity names.
+  bool include_schemas = 3;             // If false, only metadata is returned (no schema payloads).
+}
+
+message DiscoverResponse {
+  PlatformInfo platform = 1;            // High-level platform/source info.
+  repeated EntityDescriptor entities = 2;// All entities (tables/objects and link-objects).
+}
+
+// Platform/source information (useful for logging, governance, and routing).
+message PlatformInfo {
+  string name = 1;                      // e.g., "Windchill", "Teamcenter", "PostgreSQL"
+  string vendor = 2;                    // e.g., "PTC", "Siemens", "PostgreSQL Global Dev"
+  string version = 3;                   // e.g., "12.3"
+  string timezone = 4;                  // e.g., "UTC"
+  map<string, string> tags = 5;         // Free-form: edition, api_tier, region, etc.
+}
+
+// An entity is either a business object (NODE) or a link object (LINK) with attributes.
+// LINKs must declare their src/dst endpoints (logical FKs).
+message EntityDescriptor {
+  string name = 1;                      // e.g., "Part", "Document", "BOMLink"
+  EntityKind kind = 2;                  // NODE or LINK
+  string display_name = 3;              // Human-friendly label
+  string description = 4;               // Optional docs
+
+  SchemaDescriptor schema = 5;          // The entity's schema and schema_id/version.
+
+  // Keys & relational hints.
+  repeated string primary_key = 6;      // ["id"] or a composite key
+  repeated UniqueKey unique_keys = 7;   // Additional unique constraints
+  bool soft_delete = 8;                 // If soft deletes exist
+  string soft_delete_field = 9;         // Field name for soft delete marker (e.g., "deleted_at")
+
+  // For LINK (kind=LINK): logical endpoints the link connects (should match target entity PKs).
+  LinkEndpoint src = 10;                // Can be empty for NODEs
+  LinkEndpoint dst = 11;
+
+  // Supported cursor fields for incremental reads (updated_at, version, LSN, etc.).
+  repeated CursorField cursors = 12;
+
+  // Which extraction modes / features are supported by this entity.
+  ExtractionCapabilities capabilities = 13;
+
+  // Optional sizing hint.
+  int64 estimated_rows = 14;            // Rough estimate if known, otherwise 0
+}
+
+enum EntityKind {
+  KIND_UNSPECIFIED = 0;
+  NODE = 1;
+  LINK = 2;
+}
+
+message SchemaDescriptor {
+  string schema_id = 1;                 // Logical version, e.g. "part_v3"
+  oneof spec {
+    bytes arrow = 2;                    // Apache Arrow IPC schema (recommended)
+    string json = 3;                    // JSON Schema or Avro schema as JSON
+  }
+}
+
+message UniqueKey { repeated string columns = 1; }
+
+message LinkEndpoint {
+  string entity = 1;                    // Target entity name, e.g., "Part"
+  repeated string key_fields = 2;       // Fields in THIS entity that reference the target PK (order must match PK)
+}
+
+message CursorField {
+  string field = 1;                     // e.g., "updated_at", "version", "lsn"
+  CursorType type = 2;
+  bool monotonic = 3;                   // True if non-decreasing is guaranteed
+}
+
+enum CursorType {
+  CURSOR_TYPE_UNSPECIFIED = 0;
+  TIMESTAMP = 1;    // e.g., updated_at
+  INCREMENTING = 2; // e.g., version number
+  LSN = 3;          // Log sequence number (DB log position)
+  OPAQUE = 4;       // Connector-defined opaque token
+}
+
+// Per-entity capabilities (what this connector can do for that entity).
+message ExtractionCapabilities {
+  // High-level modes
+  bool supports_full_table = 1;
+  bool supports_change_stream = 2;
+  bool supports_subgraph = 3;          // Typically meaningful for NODEs involved in LINKs
+
+  // Query features
+  bool supports_projection = 10;       // Select subset of columns
+  bool supports_filter = 11;           // Server-side filtering
+  bool supports_ordering = 12;         // Stable ORDER BY on given columns
+  repeated string orderable_fields = 13;// Fields that can be used for stable ordering (e.g., PK columns)
+
+  // Subgraph specifics (only relevant if supports_subgraph=true)
+  repeated string subgraph_link_entities = 20; // LINK entity names allowed during traversal
+  int32 subgraph_max_depth_supported = 21;     // -1 = unlimited; 0 = head only; N = max depth
+}
+
+// ===========================
+//   CHECK / OPEN / CLOSE
+// ===========================
+message CheckRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;       // Source credentials, endpoints, options
+}
+
+message CheckResponse {
+  bool ok = 1;
+  string message = 2;                   // When not ok: reason
+  map<string, string> details = 3;      // Optional more info
+}
+
+message OpenRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;       // Same config used for Read; connector may pin snapshot here
+}
+
+message OpenResponse {
+  string session_id = 1;                // Optional logical session id (echo back in logs)
+  int64 expires_at_epoch_ms = 2;        // Optional: when the session should be considered stale
+}
+
+message CloseRequest { string session_id = 1; }
+message CloseResponse {}
+
+// ===========================
+//           READ
+// ===========================
+
+message ReadRequest {
+  string session_id = 1;                // Optional, if Open/Close are used
+  // Exactly one mode must be set:
+  oneof mode {
+    FullTableScan full_table = 10;
+    ChangeStream change_stream = 11;
+    SubgraphRead subgraph = 12;
+  }
+  Projection projection = 2;            // Optional: subset of fields to return
+  RateLimit rate_limit = 3;             // Optional: QPS/parallelism limits
+}
+
+message FullTableScan {
+  string entity = 1;                    // Entity name (NODE or LINK)
+  Cursor resume_from = 2;               // Opaque cursor for resume (page token, last_pk, etc.)
+  Filter filter = 3;                    // Optional server-side filter
+  Ordering ordering = 4;                // Stable ordering (e.g., primary key asc)
+  SnapshotOptions snapshot = 5;         // How to ensure consistency
+}
+
+message ChangeStream {
+  string entity = 1;                    // Change feed / CDC for this entity
+  Cursor from = 2;                      // Opaque starting position (LSN/offset/timestamp)
+  Filter filter = 3;                    // Optional filter (e.g., updated_at >= T)
+}
+
+message SubgraphRead {
+  repeated Head heads = 1;              // Starting nodes (entity/key)
+  Traversal traversal = 2;              // Traversal policy
+  SnapshotOptions snapshot = 3;         // Consistent view for nodes+links
+  Cursor resume_from = 4;               // Opaque traversal frontier for resume
+}
+
+message Head { string entity = 1; string key = 2; }
+
+// Stream payload: schema messages (optional), data records (NODE or LINK), periodic state checkpoints,
+// plus logs/metrics for observability.
+message ReadMessage {
+  oneof msg {
+    SchemaMsg schema = 1;               // (Optional) schema broadcast/update
+    RecordMsg record = 2;               // Data (NODE or LINK), including deletes
+    StateMsg state = 3;                 // Checkpoint (cursor/watermark/group frontier)
+    LogMsg log = 4;                     // Structured logs
+    MetricMsg metric = 5;               // Simple metrics
+  }
+}
+
+enum Op {
+  OP_UNSPECIFIED = 0;
+  UPSERT = 1;
+  DELETE = 2;
+}
+
+message RecordMsg {
+  string entity = 1;                    // e.g., "Part" or "BOMLink"
+  string key = 2;                       // Primary key serialized (unique within entity)
+  bytes payload = 3;                    // Row payload (Arrow/Avro/JSON — choice must match SchemaDescriptor)
+  string schema_id = 4;                 // Version to validate reader compatibility
+  Op op = 5;                            // UPSERT/DELETE
+  string group_id = 6;                  // For subgraph: group all records belonging to the same head
+  int64 ts_event = 7;                   // Logical event time (watermark) in epoch millis
+}
+
+message StateMsg {
+  Cursor cursor = 1;                    // Opaque; sufficient to resume without duplication
+  int64 watermark = 2;                  // Max logical timestamp observed so far (epoch millis)
+  string group_id = 3;                  // For subgraph: optional "group closure" marker
+}
+
+// ===========================
+//       UTIL / OPTIONS
+// ===========================
+
+message Projection { repeated string columns = 1; } // Empty = all columns
+
+// Keep Filter simple and vendor-neutral. Use one of:
+// - expression: connector-level expression language or SQL-ish string
+// - predicates: a simple list of (field, op, value) triplets (optional to implement)
+message Filter {
+  string expression = 1; // e.g., "updated_at >= '2024-01-01T00:00:00Z' AND status IN ('A','B')"
+  repeated Predicate predicates = 2; // Optional alternative for structured filters
+}
+message Predicate {
+  string field = 1;                   // e.g., "updated_at"
+  string op = 2;                      // e.g., ">", ">=", "=", "IN"
+  repeated string values = 3;         // string-encoded values
+}
+
+message Ordering {
+  repeated OrderBy by = 1;            // e.g., [{column:"id", direction:ASC}]
+}
+message OrderBy {
+  string column = 1;
+  Direction direction = 2;
+}
+enum Direction { DIR_UNSPECIFIED = 0; ASC = 1; DESC = 2; }
+
+// Snapshot consistency hints. The connector should pick the strongest available option.
+message SnapshotOptions {
+  ConsistencyMode mode = 1;           // Desired consistency level
+  string as_of = 2;                   // Optional: timestamp/SCN/LSN string for "AS OF" reads
+}
+enum ConsistencyMode {
+  CONSISTENCY_UNSPECIFIED = 0;
+  READ_COMMITTED = 1;
+  REPEATABLE_READ = 2;
+  SNAPSHOT_AS_OF = 3;                 // Point-in-time ("AS OF") if supported
+}
+
+message Cursor { bytes token = 1; }    // Opaque, connector-defined
+
+message RateLimit {
+  int32 qps = 1;                       // Max requests per second (best-effort)
+  int32 parallelism = 2;               // Internal parallelism for fetching
+}
+
+// Subgraph traversal policy (PLM/graph scenarios).
+message Traversal {
+  repeated string allowed_link_entities = 1; // LINK entity names allowed during traversal (e.g., ["BOMLink","PartDocLink"])
+  int32 max_depth = 2;                       // -1 = unlimited; 0 = only the head; N = max depth
+  TraversalDirection direction = 3;          // OUTBOUND/INBOUND/BOTH
+  bool allow_revisit = 4;                    // If false, connector must maintain a visited set
+  bool strict_referential_integrity = 5;     // If true, missing references should be surfaced via LOG and/or error policy
+}
+enum TraversalDirection { TRAV_DIR_UNSPECIFIED = 0; OUTBOUND = 1; INBOUND = 2; BOTH = 3; }
+
+// Optional schema re-broadcast during Read (e.g., on evolution or first message per entity).
+message SchemaMsg {
+  string entity = 1;
+  string schema_id = 2;
+  oneof spec {
+    bytes arrow = 3;
+    string json = 4;
+  }
+}
+
+// Basic structured logs and lightweight metrics to help with observability.
+message LogMsg {
+  string level = 1;                    // "INFO","WARN","ERROR","DEBUG"
+  string message = 2;
+  map<string, string> kv = 3;          // e.g., {"tenant":"t42","entity":"Part","code":"AUTH_RATE_LIMIT"}
+}
+
+message MetricMsg {
+  string name = 1;                     // e.g., "records_emitted", "api_latency_ms"
+  double value = 2;
+  map<string, string> tags = 3;        // e.g., {"entity":"Part","mode":"full_table"}
+}

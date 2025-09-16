@@ -1,0 +1,71 @@
+apiVersion: connector/v1
+kind: ConnectorManifest
+metadata:
+  name: postgres
+  displayName: PostgreSQL Connector
+  description: Connector for extracting data from PostgreSQL databases
+  version: 1.0.0
+  tags:
+    - database
+    - sql
+    - relational
+
+spec:
+  platform:
+    name: PostgreSQL
+    vendor: PostgreSQL Global Development Group
+    supportedVersions:
+      - "12.x"
+      - "13.x"
+      - "14.x"
+      - "15.x"
+      - "16.x"
+
+  capabilities:
+    extraction:
+      fullTable: true
+      incremental: true
+      subgraph: false
+    discovery:
+      schemas: true
+      entities: true
+      relationships: true
+    authentication:
+      - password
+      - ssl
+
+  configuration:
+    required:
+      - host
+      - port
+      - database
+      - username
+      - password
+    optional:
+      - sslmode
+      - schema
+      - connect_timeout
+      - statement_timeout
+
+  entities:
+    supportedTypes:
+      - tables
+      - views
+    metadata:
+      primaryKeys: true
+      foreignKeys: true
+      indexes: true
+      constraints: true
+
+  performance:
+    batchSize: 10000
+    maxConnections: 10
+    queryTimeout: 300s
+
+  compliance:
+    dataPrivacy:
+      - GDPR
+      - CCPA
+    security:
+      - encryption_in_transit
+      - encryption_at_rest

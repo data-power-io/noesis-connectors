@@ -1,0 +1,86 @@
+site_name: Noesis Connectors
+site_description: Open-source, language-agnostic framework for building data connectors
+site_url: https://docs.noesis.dev/connectors
+repo_name: noesis-connectors
+repo_url: https://github.com/data-power-io/noesis-connectors
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - search.highlight
+    - search.share
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Overview: getting-started/overview.md
+    - Quick Start: getting-started/quick-start.md
+    - Installation: getting-started/installation.md
+  - SDKs:
+    - Go SDK: sdks/go.md
+    - Python SDK: sdks/python.md
+    - Node.js SDK: sdks/node.md
+  - Connectors:
+    - Overview: connectors/overview.md
+    - PostgreSQL: connectors/postgres.md
+    - Salesforce: connectors/salesforce.md
+    - Building Connectors: connectors/building.md
+  - API Reference:
+    - Protocol: api/protocol.md
+    - gRPC API: api/grpc.md
+    - Data Types: api/data-types.md
+  - Development:
+    - Architecture: development/architecture.md
+    - Contributing: development/contributing.md
+    - Testing: development/testing.md
+    - Deployment: development/deployment.md
+  - Tools:
+    - Test Harness: tools/test-harness.md
+    - Scaffolding: tools/scaffolding.md
+    - Code Generation: tools/code-generation.md
+
+plugins:
+  - search
+  - mkdocstrings
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/data-power-io/noesis-connectors
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/u/noesis

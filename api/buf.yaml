@@ -1,0 +1,13 @@
+version: v1
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT
+  except:
+    - COMMENT_FIELD
+    - RPC_REQUEST_RESPONSE_UNIQUE
+build:
+  roots:
+    - .

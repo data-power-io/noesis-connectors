@@ -1,0 +1,118 @@
+name: Connector Request
+description: Request a new connector for a data source
+title: "[Connector] "
+labels: ["connector", "enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Request a new connector for a data source!
+
+  - type: input
+    id: data_source
+    attributes:
+      label: Data Source Name
+      description: What data source would you like a connector for?
+      placeholder: "e.g., Salesforce, MongoDB, MySQL, Snowflake"
+    validations:
+      required: true
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor/Provider
+      description: Who is the vendor or provider of this data source?
+      placeholder: "e.g., Salesforce Inc., Oracle, Microsoft"
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this connector to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would be useful
+        - High - Important for our use case
+        - Critical - Blocking our adoption
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Describe your use case for this connector
+      placeholder: What data would you extract? How would you use it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: api_info
+    attributes:
+      label: API Information
+      description: |
+        Provide information about the data source's API:
+        - Does it have a REST API?
+        - Does it have a GraphQL API?
+        - Does it support bulk export?
+        - Does it have change data capture?
+        - Are there rate limits?
+        - Authentication methods?
+      placeholder: |
+        - API Type: REST/GraphQL/JDBC/etc.
+        - Authentication: OAuth 2.0/API Key/Basic Auth/etc.
+        - Rate Limits:
+        - Bulk Export: Yes/No
+        - Change Data Capture: Yes/No
+        - Documentation: [URL]
+
+  - type: textarea
+    id: data_model
+    attributes:
+      label: Data Model
+      description: Describe the data model and entities you need to extract
+      placeholder: |
+        What entities/tables would this connector need to support?
+        - Users
+        - Organizations
+        - Projects
+        - etc.
+
+  - type: checkboxes
+    id: extraction_modes
+    attributes:
+      label: Required Extraction Modes
+      description: Which extraction modes do you need?
+      options:
+        - label: Full Table Scan
+        - label: Incremental/Change Data Capture
+        - label: Graph Traversal (for relationship data)
+
+  - type: textarea
+    id: challenges
+    attributes:
+      label: Known Challenges
+      description: Are there any known challenges or limitations with this data source?
+      placeholder: |
+        - API limitations
+        - Authentication complexities
+        - Data format issues
+        - Rate limiting concerns
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute to this connector?
+      options:
+        - label: I would be willing to help implement this connector
+        - label: I can provide testing and feedback
+        - label: I have access to this system for testing
+        - label: I can provide documentation or examples
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about this connector request
+      placeholder: Links to API documentation, similar connectors, etc.

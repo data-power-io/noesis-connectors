@@ -1,0 +1,148 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2025-01-16T10:00:00Z",
+  "repository": "https://github.com/data-power-io/noesis-connectors",
+  "documentation": "https://docs.noesis.dev/connectors",
+  "connectors": [
+    {
+      "name": "postgres",
+      "display_name": "PostgreSQL Connector",
+      "description": "Connector for extracting data from PostgreSQL databases",
+      "version": "1.0.0",
+      "language": "go",
+      "status": "stable",
+      "tags": [
+        "database",
+        "sql",
+        "relational"
+      ],
+      "platform": {
+        "name": "PostgreSQL",
+        "vendor": "PostgreSQL Global Development Group",
+        "supported_versions": [
+          "12.x",
+          "13.x",
+          "14.x",
+          "15.x",
+          "16.x"
+        ]
+      },
+      "capabilities": {
+        "extraction": {
+          "full_table": true,
+          "incremental": true,
+          "subgraph": false
+        },
+        "discovery": {
+          "schemas": true,
+          "entities": true,
+          "relationships": true
+        },
+        "authentication": [
+          "password",
+          "ssl"
+        ]
+      },
+      "configuration": {
+        "required": [
+          "host",
+          "port",
+          "database",
+          "username",
+          "password"
+        ],
+        "optional": [
+          "sslmode",
+          "schema",
+          "connect_timeout",
+          "statement_timeout"
+        ]
+      },
+      "docker_image": "noesis/postgres-connector:1.0.0",
+      "source_url": "https://github.com/data-power-io/noesis-connectors/tree/main/connectors/postgres",
+      "documentation_url": "https://docs.noesis.dev/connectors/postgres",
+      "manifest_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/connectors/postgres/connector.yaml",
+      "schema_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/catalog/schema/postgres-v1.json",
+      "created_at": "2025-01-16T10:00:00Z",
+      "updated_at": "2025-01-16T10:00:00Z"
+    },
+    {
+      "name": "salesforce",
+      "display_name": "Salesforce Connector",
+      "description": "Connector for extracting data from Salesforce CRM",
+      "version": "1.0.0",
+      "language": "python",
+      "status": "beta",
+      "tags": [
+        "crm",
+        "saas",
+        "api"
+      ],
+      "platform": {
+        "name": "Salesforce",
+        "vendor": "Salesforce Inc.",
+        "supported_versions": [
+          "Spring '23",
+          "Summer '23",
+          "Winter '24",
+          "Spring '24"
+        ]
+      },
+      "capabilities": {
+        "extraction": {
+          "full_table": true,
+          "incremental": true,
+          "subgraph": true
+        },
+        "discovery": {
+          "schemas": true,
+          "entities": true,
+          "relationships": true
+        },
+        "authentication": [
+          "oauth2",
+          "jwt"
+        ]
+      },
+      "configuration": {
+        "required": [
+          "instance_url",
+          "client_id",
+          "client_secret"
+        ],
+        "optional": [
+          "api_version",
+          "sandbox",
+          "timeout"
+        ]
+      },
+      "docker_image": "noesis/salesforce-connector:1.0.0-beta",
+      "source_url": "https://github.com/data-power-io/noesis-connectors/tree/main/connectors/salesforce",
+      "documentation_url": "https://docs.noesis.dev/connectors/salesforce",
+      "manifest_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/connectors/salesforce/connector.yaml",
+      "schema_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/catalog/schema/salesforce-v1.json",
+      "created_at": "2025-01-16T10:00:00Z",
+      "updated_at": "2025-01-16T10:00:00Z"
+    }
+  ],
+  "statistics": {
+    "total_connectors": 2,
+    "by_status": {
+      "stable": 1,
+      "beta": 1,
+      "alpha": 0,
+      "deprecated": 0
+    },
+    "by_language": {
+      "go": 1,
+      "python": 1,
+      "node": 0
+    },
+    "by_category": {
+      "database": 1,
+      "api": 1,
+      "file": 0,
+      "stream": 0
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "connector_name": "my-connector",
+  "connector_display_name": "My Data Source Connector",
+  "connector_description": "Connector for extracting data from My Data Source",
+  "source_system": "My Data Source",
+  "vendor": "My Company",
+  "language": ["go", "python", "node"],
+  "author_name": "Your Name",
+  "author_email": "your.email@company.com",
+  "github_username": "yourusername",
+  "version": "1.0.0",
+  "api_type": ["REST", "GraphQL", "JDBC", "Custom"],
+  "authentication": ["oauth2", "api_key", "basic_auth", "custom"],
+  "extraction_modes": {
+    "full_table": "y",
+    "incremental": "y",
+    "subgraph": "n"
+  },
+  "data_formats": ["json", "xml", "csv", "arrow"],
+  "include_docker": "y",
+  "include_tests": "y",
+  "include_docs": "y",
+  "license": ["Apache-2.0", "MIT", "BSD-3-Clause"]
+}
