@@ -214,11 +214,11 @@ func mapPostgreSQLTypeToArrow(pgType string) string {
 func hasTimestampColumn(columns []ColumnInfo) bool {
 	for _, col := range columns {
 		if col.DataType == "timestamp" ||
-		   col.DataType == "timestamp without time zone" ||
-		   col.DataType == "timestamp with time zone" ||
-		   col.DataType == "timestamptz" ||
-		   col.Name == "updated_at" ||
-		   col.Name == "modified_at" {
+			col.DataType == "timestamp without time zone" ||
+			col.DataType == "timestamp with time zone" ||
+			col.DataType == "timestamptz" ||
+			col.Name == "updated_at" ||
+			col.Name == "modified_at" {
 			return true
 		}
 	}

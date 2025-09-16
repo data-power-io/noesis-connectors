@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap"
 )
 
 // ConnectorLogger wraps zap.Logger with connector-specific functionality

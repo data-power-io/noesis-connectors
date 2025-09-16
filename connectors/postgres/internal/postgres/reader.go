@@ -272,9 +272,9 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo) 
 func (r *Reader) findTimestampColumn(columns []ColumnInfo) string {
 	for _, col := range columns {
 		if col.DataType == "timestamp" ||
-		   col.DataType == "timestamp without time zone" ||
-		   col.DataType == "timestamp with time zone" ||
-		   col.DataType == "timestamptz" {
+			col.DataType == "timestamp without time zone" ||
+			col.DataType == "timestamp with time zone" ||
+			col.DataType == "timestamptz" {
 			return col.Name
 		}
 	}
