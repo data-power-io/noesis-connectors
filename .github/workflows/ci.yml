@@ -43,12 +43,7 @@ jobs:
       run: go mod download
 
     - name: Install tools
-      working-directory: sdks/go
       run: make install-tools
-
-    - name: Generate protobuf
-      working-directory: sdks/go
-      run: make proto
 
     - name: Format check
       working-directory: sdks/go
