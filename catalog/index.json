@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "apiVersion": "catalog.noesis.io/v1",
+  "apiVersion": "catalog.v1",
   "kind": "ConnectorCatalog",
   "metadata": {
     "name": "noesis-connectors",
@@ -20,7 +20,7 @@
       "name": "postgres",
       "displayName": "PostgreSQL Source Connector",
       "description": "Extract data from PostgreSQL databases with CDC support",
-      "image": "docker.io/benoittailhades/noesis-postgres-connector:1.0.0",
+      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:1f05b6af9608bf25a336d9d1f181f9c2cbae0c675f6d9a001d1fbceea1b2740e",
       "semver": "1.0.0",
       "api": "connector.v1",
       "protocol": "grpc",
@@ -63,8 +63,7 @@
           "cpu": "500m",
           "memory": "1Gi"
         }
-      },
-      "docker_image": "benoittailhades/noesis-postgres-connector@sha256:1f05b6af9608bf25a336d9d1f181f9c2cbae0c675f6d9a001d1fbceea1b2740e"
+      }
     }
   },
   "annotations": {
