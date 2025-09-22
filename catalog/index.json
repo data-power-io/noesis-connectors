@@ -1,148 +1,75 @@
 {
-  "version": "1.0.0",
-  "generated_at": "2025-01-16T10:00:00Z",
-  "repository": "https://github.com/data-power-io/noesis-connectors",
-  "documentation": "https://docs.noesis.dev/connectors",
-  "connectors": [
-    {
+  "version": "1.0",
+  "apiVersion": "catalog.noesis.io/v1",
+  "kind": "ConnectorCatalog",
+  "metadata": {
+    "name": "noesis-connectors",
+    "description": "Official Noesis Connector Catalog",
+    "version": "1.0.0",
+    "publisher": "Data Power",
+    "labels": {
+      "organization": "data-power",
+      "tier": "official",
+      "support": "community"
+    },
+    "created": "2025-01-22T10:00:00Z",
+    "updated": "2025-01-22T10:00:00Z"
+  },
+  "connectors": {
+    "postgres": {
       "name": "postgres",
-      "display_name": "PostgreSQL Connector",
-      "description": "Connector for extracting data from PostgreSQL databases",
-      "version": "1.0.0",
-      "language": "go",
-      "status": "stable",
-      "tags": [
-        "database",
-        "sql",
-        "relational"
-      ],
-      "platform": {
-        "name": "PostgreSQL",
-        "vendor": "PostgreSQL Global Development Group",
-        "supported_versions": [
-          "12.x",
-          "13.x",
-          "14.x",
-          "15.x",
-          "16.x"
-        ]
-      },
+      "displayName": "PostgreSQL Source Connector",
+      "description": "Extract data from PostgreSQL databases with CDC support",
+      "image": "docker.io/benoittailhades/noesis-postgres-connector:1.0.0",
+      "semver": "1.0.0",
+      "api": "connector.v1",
+      "protocol": "grpc",
+      "kind": "source",
       "capabilities": {
-        "extraction": {
-          "full_table": true,
-          "incremental": true,
-          "subgraph": false
-        },
-        "discovery": {
-          "schemas": true,
-          "entities": true,
-          "relationships": true
-        },
-        "authentication": [
+        "discovery": true,
+        "checkConnection": true,
+        "incremental": true,
+        "cdc": false,
+        "schema_evolution": true,
+        "partitioning": false,
+        "filtering": true,
+        "auth": [
           "password",
+          "ssl"
+        ],
+        "encryption": [
+          "tls",
           "ssl"
         ]
       },
-      "configuration": {
-        "required": [
-          "host",
-          "port",
-          "database",
-          "username",
-          "password"
-        ],
-        "optional": [
-          "sslmode",
-          "schema",
-          "connect_timeout",
-          "statement_timeout"
-        ]
+      "labels": {
+        "org.yourtool.api": "connector.v1",
+        "org.yourtool.protocol": "grpc",
+        "org.yourtool.vendor": "data-power",
+        "org.yourtool.category": "database",
+        "org.yourtool.tier": "stable"
       },
-      "docker_image": "noesis/postgres-connector:1.0.0",
-      "source_url": "https://github.com/data-power-io/noesis-connectors/tree/main/connectors/postgres",
-      "documentation_url": "https://docs.noesis.dev/connectors/postgres",
-      "manifest_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/connectors/postgres/connector.yaml",
-      "schema_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/catalog/schema/postgres-v1.json",
-      "created_at": "2025-01-16T10:00:00Z",
-      "updated_at": "2025-01-16T10:00:00Z"
-    },
-    {
-      "name": "salesforce",
-      "display_name": "Salesforce Connector",
-      "description": "Connector for extracting data from Salesforce CRM",
-      "version": "1.0.0",
-      "language": "python",
-      "status": "beta",
-      "tags": [
-        "crm",
-        "saas",
-        "api"
+      "platforms": [
+        "linux/amd64"
       ],
-      "platform": {
-        "name": "Salesforce",
-        "vendor": "Salesforce Inc.",
-        "supported_versions": [
-          "Spring '23",
-          "Summer '23",
-          "Winter '24",
-          "Spring '24"
-        ]
-      },
-      "capabilities": {
-        "extraction": {
-          "full_table": true,
-          "incremental": true,
-          "subgraph": true
+      "docsUrl": "https://docs.noesis.dev/connectors/postgres",
+      "minRunner": "1.0.0",
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
         },
-        "discovery": {
-          "schemas": true,
-          "entities": true,
-          "relationships": true
-        },
-        "authentication": [
-          "oauth2",
-          "jwt"
-        ]
+        "limits": {
+          "cpu": "500m",
+          "memory": "1Gi"
+        }
       },
-      "configuration": {
-        "required": [
-          "instance_url",
-          "client_id",
-          "client_secret"
-        ],
-        "optional": [
-          "api_version",
-          "sandbox",
-          "timeout"
-        ]
-      },
-      "docker_image": "noesis/salesforce-connector:1.0.0-beta",
-      "source_url": "https://github.com/data-power-io/noesis-connectors/tree/main/connectors/salesforce",
-      "documentation_url": "https://docs.noesis.dev/connectors/salesforce",
-      "manifest_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/connectors/salesforce/connector.yaml",
-      "schema_url": "https://raw.githubusercontent.com/data-power-io/noesis-connectors/main/catalog/schema/salesforce-v1.json",
-      "created_at": "2025-01-16T10:00:00Z",
-      "updated_at": "2025-01-16T10:00:00Z"
+      "docker_image": "benoittailhades/noesis-postgres-connector@sha256:1f05b6af9608bf25a336d9d1f181f9c2cbae0c675f6d9a001d1fbceea1b2740e"
     }
-  ],
-  "statistics": {
-    "total_connectors": 2,
-    "by_status": {
-      "stable": 1,
-      "beta": 1,
-      "alpha": 0,
-      "deprecated": 0
-    },
-    "by_language": {
-      "go": 1,
-      "python": 1,
-      "node": 0
-    },
-    "by_category": {
-      "database": 1,
-      "api": 1,
-      "file": 0,
-      "stream": 0
-    }
+  },
+  "annotations": {
+    "catalog.noesis.io/last-refresh": "2025-01-22T10:00:00Z",
+    "catalog.noesis.io/connector-count": "1",
+    "catalog.noesis.io/license": "Apache-2.0"
   }
 }
