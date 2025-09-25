@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -38,6 +39,69 @@ func (c *Config) loadFromEnv() {
 			c.values[envVar] = value
 		}
 	}
+}
+
+// NormalizeConfig converts JSON Schema config format to internal format
+func NormalizeConfig(rawConfig map[string]string) (map[string]string, error) {
+	if err := ValidateConfig(rawConfig); err != nil {
+		return nil, err
+	}
+
+	config := make(map[string]string)
+
+	// Map JSON Schema field names to internal field names
+	if hostname := rawConfig["hostname"]; hostname != "" {
+		config["host"] = hostname
+	}
+	if port := rawConfig["port"]; port != "" {
+		config["port"] = port
+	}
+	if database := rawConfig["database"]; database != "" {
+		config["database"] = database
+	}
+	if username := rawConfig["username"]; username != "" {
+		config["username"] = username
+	}
+	if password := rawConfig["password"]; password != "" {
+		config["password"] = password
+	}
+	if sslMode := rawConfig["sslMode"]; sslMode != "" {
+		config["sslmode"] = sslMode
+	} else {
+		config["sslmode"] = "prefer" // default value
+	}
+	if schema := rawConfig["schema"]; schema != "" {
+		config["schema"] = schema
+	} else {
+		config["schema"] = "public" // default value
+	}
+
+	// Convert integer timeouts to duration strings
+	if connectTimeout := rawConfig["connectTimeout"]; connectTimeout != "" {
+		config["connect_timeout"] = connectTimeout + "s"
+	} else {
+		config["connect_timeout"] = "30s" // default value
+	}
+	if statementTimeout := rawConfig["statementTimeout"]; statementTimeout != "" {
+		config["statement_timeout"] = statementTimeout + "s"
+	} else {
+		config["statement_timeout"] = "300s" // default value
+	}
+
+	return config, nil
+}
+
+// ValidateConfig validates required fields are present
+func ValidateConfig(config map[string]string) error {
+	requiredFields := []string{"hostname", "port", "database", "username", "password"}
+
+	for _, field := range requiredFields {
+		if value := config[field]; value == "" {
+			return fmt.Errorf("required field '%s' is missing or empty", field)
+		}
+	}
+
+	return nil
 }
 
 func (c *Config) GetString(key, defaultValue string) string {

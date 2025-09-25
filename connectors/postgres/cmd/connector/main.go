@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net"
@@ -9,7 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/data-power-io/noesis-connectors/connectors/postgres/internal/config"
 	"github.com/data-power-io/noesis-connectors/connectors/postgres/internal/postgres"
 	"github.com/data-power-io/noesis-connectors/sdks/go/server"
 	noesisv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
@@ -30,12 +28,7 @@ func main() {
 	}
 	defer logger.Sync()
 
-	cfg, err := config.Load()
-	if err != nil {
-		logger.Fatal("Failed to load configuration", zap.Error(err))
-	}
-
-	handler, err := postgres.NewHandler(cfg, logger)
+	handler, err := postgres.NewHandler(nil, logger)
 	if err != nil {
 		logger.Fatal("Failed to create PostgreSQL handler", zap.Error(err))
 	}
@@ -50,7 +43,10 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
-	port := cfg.GetString("port", "50051")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "50051"
+	}
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		logger.Fatal("Failed to listen", zap.String("port", port), zap.Error(err))
@@ -81,23 +77,15 @@ func healthCheck() int {
 	}
 	defer logger.Sync()
 
-	cfg, err := config.Load()
-	if err != nil {
-		logger.Error("Failed to load configuration", zap.Error(err))
-		return 1
-	}
-
-	handler, err := postgres.NewHandler(cfg, logger)
+	handler, err := postgres.NewHandler(nil, logger)
 	if err != nil {
 		logger.Error("Failed to create handler", zap.Error(err))
 		return 1
 	}
 	defer handler.Close()
 
-	if err := handler.CheckConnection(context.Background(), cfg.GetConnectionConfig()); err != nil {
-		logger.Error("Health check failed", zap.Error(err))
-		return 1
-	}
-
+	// Health check just verifies the handler can be created
+	// Actual connection testing is done during CheckConnection API call
+	logger.Info("Health check passed - connector is ready")
 	return 0
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/data-power-io/noesis-connectors/connectors/postgres/internal/config"
+	configpkg "github.com/data-power-io/noesis-connectors/connectors/postgres/internal/config"
 	"github.com/data-power-io/noesis-connectors/sdks/go/server"
 	noesisv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
 	"github.com/google/uuid"
@@ -15,12 +15,12 @@ import (
 )
 
 type Handler struct {
-	config *config.Config
+	config *configpkg.Config
 	logger *zap.Logger
 	client *Client
 }
 
-func NewHandler(cfg *config.Config, logger *zap.Logger) (*Handler, error) {
+func NewHandler(cfg *configpkg.Config, logger *zap.Logger) (*Handler, error) {
 	handler := &Handler{
 		config: cfg,
 		logger: logger,
@@ -36,7 +36,12 @@ func (h *Handler) Close() error {
 	return nil
 }
 
-func (h *Handler) CheckConnection(ctx context.Context, config map[string]string) error {
+func (h *Handler) CheckConnection(ctx context.Context, rawConfig map[string]string) error {
+	config, err := configpkg.NormalizeConfig(rawConfig)
+	if err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	client, err := NewClient(config, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
@@ -54,13 +59,12 @@ func (h *Handler) CheckConnection(ctx context.Context, config map[string]string)
 func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (*noesisv1.DiscoverResponse, error) {
 	h.logger.Info("Starting discovery", zap.String("tenant_id", req.TenantId))
 
-	// Use the config from the handler since DiscoverRequest doesn't have Config field
-	config := h.config.GetConnectionConfig()
-	client, err := NewClient(config, h.logger)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "failed to create client: %v", err)
+	// Discovery requires an active session with established client connection
+	if h.client == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "no active session - discovery requires an open session")
 	}
-	defer client.Close()
+
+	client := h.client
 
 	schemas, err := client.GetSchemas(ctx)
 	if err != nil {
@@ -136,7 +140,12 @@ func (h *Handler) OpenSession(ctx context.Context, req *noesisv1.OpenRequest) (s
 	sessionID := uuid.New().String()
 	expiresAt := time.Now().Add(time.Hour)
 
-	client, err := NewClient(req.Config, h.logger)
+	config, err := configpkg.NormalizeConfig(req.Config)
+	if err != nil {
+		return "", time.Time{}, status.Errorf(codes.InvalidArgument, "invalid configuration: %v", err)
+	}
+
+	client, err := NewClient(config, h.logger)
 	if err != nil {
 		return "", time.Time{}, status.Errorf(codes.InvalidArgument, "failed to create client: %v", err)
 	}

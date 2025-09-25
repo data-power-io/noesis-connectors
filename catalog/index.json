@@ -13,14 +13,14 @@
       "support": "community"
     },
     "created": "2025-01-22T10:00:00Z",
-    "updated": "2025-01-22T10:00:00Z"
+    "updated": "2025-09-25T21:58:07Z"
   },
   "connectors": {
     "postgres": {
       "name": "postgres",
       "displayName": "PostgreSQL Source Connector",
       "description": "Extract data from PostgreSQL databases with CDC support",
-      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:869404b9e57b831920ee9f835a2c90980f61da171313f93fc089b585534f59a3",
+      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:35abb4649da04bd8d276fa4c0a1aa817bfe474d17e17b83f115b4e3975657c54",
       "semver": "1.0.0",
       "api": "connector.v1",
       "protocol": "grpc",
@@ -41,6 +41,96 @@
           "tls",
           "ssl"
         ]
+      },
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "hostname",
+          "port",
+          "database",
+          "username",
+          "password"
+        ],
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "title": "Database Host",
+            "description": "PostgreSQL server hostname or IP address",
+            "pattern": "^[a-zA-Z0-9.-]+$",
+            "examples": [
+              "localhost",
+              "postgres.example.com",
+              "192.168.1.100"
+            ]
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port",
+            "description": "PostgreSQL server port number",
+            "default": 5432,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "database": {
+            "type": "string",
+            "title": "Database Name",
+            "description": "Name of the PostgreSQL database to connect to",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username",
+            "description": "Database username for authentication",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Database password for authentication",
+            "format": "password",
+            "secret": true,
+            "minLength": 1
+          },
+          "sslMode": {
+            "type": "string",
+            "title": "SSL Mode",
+            "description": "SSL connection mode for secure connections",
+            "enum": [
+              "disable",
+              "require",
+              "verify-ca",
+              "verify-full",
+              "prefer"
+            ],
+            "default": "prefer"
+          },
+          "schema": {
+            "type": "string",
+            "title": "Schema",
+            "description": "Database schema to extract data from",
+            "default": "public",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "connectTimeout": {
+            "type": "integer",
+            "title": "Connection Timeout",
+            "description": "Connection timeout in seconds",
+            "default": 30,
+            "minimum": 1,
+            "maximum": 300
+          },
+          "statementTimeout": {
+            "type": "integer",
+            "title": "Statement Timeout",
+            "description": "Statement execution timeout in seconds",
+            "default": 300,
+            "minimum": 1,
+            "maximum": 3600
+          }
+        }
       },
       "labels": {
         "org.yourtool.api": "connector.v1",
