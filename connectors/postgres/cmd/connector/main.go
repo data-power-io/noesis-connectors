@@ -50,7 +50,7 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
-	port := cfg.GetString("port", "8080")
+	port := cfg.GetString("port", "50051")
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		logger.Fatal("Failed to listen", zap.String("port", port), zap.Error(err))

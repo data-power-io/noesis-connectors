@@ -20,7 +20,7 @@
       "name": "postgres",
       "displayName": "PostgreSQL Source Connector",
       "description": "Extract data from PostgreSQL databases with CDC support",
-      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:1f05b6af9608bf25a336d9d1f181f9c2cbae0c675f6d9a001d1fbceea1b2740e",
+      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:869404b9e57b831920ee9f835a2c90980f61da171313f93fc089b585534f59a3",
       "semver": "1.0.0",
       "api": "connector.v1",
       "protocol": "grpc",
