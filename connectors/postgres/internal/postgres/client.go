@@ -94,15 +94,15 @@ func (c *Client) GetSchemas(ctx context.Context) ([]string, error) {
 func (c *Client) GetTables(ctx context.Context, schema string) ([]TableInfo, error) {
 	query := `
 		SELECT
-			table_name,
-			table_type,
-			COALESCE(table_comment, '') as table_comment
+			t.table_name,
+			t.table_type,
+			COALESCE(obj_description(pc.oid, 'pg_class'), '') as table_comment
 		FROM information_schema.tables t
-		LEFT JOIN pg_catalog.pg_class pc ON pc.relname = t.table_name
-		LEFT JOIN pg_catalog.pg_description pd ON pd.objoid = pc.oid AND pd.objsubid = 0
-		WHERE table_schema = $1
-		AND table_type IN ('BASE TABLE', 'VIEW')
-		ORDER BY table_name
+		LEFT JOIN pg_catalog.pg_namespace pn ON pn.nspname = t.table_schema
+		LEFT JOIN pg_catalog.pg_class pc ON pc.relname = t.table_name AND pc.relnamespace = pn.oid
+		WHERE t.table_schema = $1
+		AND t.table_type IN ('BASE TABLE', 'VIEW')
+		ORDER BY t.table_name
 	`
 
 	rows, err := c.Query(ctx, query, schema)
