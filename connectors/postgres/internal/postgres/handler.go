@@ -133,6 +133,28 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 		zap.Int("schemas", len(schemas)),
 		zap.Int("entities", len(entities)))
 
+	// Log response details being sent back to client
+	h.logger.Info("Sending discovery response to client",
+		zap.String("tenant_id", req.TenantId),
+		zap.String("platform_name", response.Platform.Name),
+		zap.String("platform_vendor", response.Platform.Vendor),
+		zap.String("platform_version", response.Platform.Version),
+		zap.Int("total_entities", len(response.Entities)))
+
+	// Log each entity being returned
+	for _, entity := range response.Entities {
+		h.logger.Debug("Entity details",
+			zap.String("entity_name", entity.Name),
+			zap.String("entity_kind", entity.Kind.String()),
+			zap.String("display_name", entity.DisplayName),
+			zap.String("description", entity.Description),
+			zap.String("schema_id", entity.Schema.SchemaId),
+			zap.Strings("primary_key", entity.PrimaryKey),
+			zap.Bool("supports_full_table", entity.Capabilities.SupportsFullTable),
+			zap.Bool("supports_change_stream", entity.Capabilities.SupportsChangeStream),
+			zap.Bool("supports_subgraph", entity.Capabilities.SupportsSubgraph))
+	}
+
 	return response, nil
 }
 
