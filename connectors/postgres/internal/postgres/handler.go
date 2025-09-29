@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	configpkg "github.com/data-power-io/noesis-connectors/connectors/postgres/internal/config"
@@ -92,21 +93,57 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 				continue
 			}
 
-			// Create schema descriptor for the entity
-			schemaDesc := &noesisv1.SchemaDescriptor{
-				SchemaId: fmt.Sprintf("%s_%s_v1", table.Schema, table.Name),
-				// For simplicity, we'll use JSON schema representation
-				Spec: &noesisv1.SchemaDescriptor_Json{
-					Json: buildJSONSchema(columns),
-				},
+			// Get additional metadata
+			constraints, err := client.GetConstraints(ctx, table.Schema, table.Name)
+			if err != nil {
+				h.logger.Warn("Failed to get constraints for table",
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Name),
+					zap.Error(err))
+				constraints = []ConstraintInfo{} // Continue with empty constraints
+			}
+
+			indexes, err := client.GetIndexes(ctx, table.Schema, table.Name)
+			if err != nil {
+				h.logger.Warn("Failed to get indexes for table",
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Name),
+					zap.Error(err))
+				indexes = []IndexInfo{} // Continue with empty indexes
+			}
+
+			tableComment, err := client.GetTableComment(ctx, table.Schema, table.Name)
+			if err != nil {
+				h.logger.Warn("Failed to get table comment",
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Name),
+					zap.Error(err))
+			}
+
+			columnComments, err := client.GetColumnComments(ctx, table.Schema, table.Name)
+			if err != nil {
+				h.logger.Warn("Failed to get column comments",
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Name),
+					zap.Error(err))
+				columnComments = make(map[string]string) // Continue with empty comments
+			}
+
+			// Build structured schema with new format
+			structuredSchema := buildStructuredSchema(table.Schema, table.Name, columns, constraints, indexes, columnComments)
+
+			// Use table comment from metadata if available, otherwise fallback to table.Comment
+			description := table.Comment
+			if tableComment != "" {
+				description = tableComment
 			}
 
 			entity := &noesisv1.EntityDescriptor{
 				Name:        table.Name,
 				Kind:        noesisv1.EntityKind_NODE, // PostgreSQL tables are NODE entities
 				DisplayName: table.Name,
-				Description: table.Comment,
-				Schema:      schemaDesc,
+				Description: description,
+				Schema:      structuredSchema,
 				PrimaryKey:  getPrimaryKeyColumns(columns),
 				Capabilities: &noesisv1.ExtractionCapabilities{
 					SupportsFullTable:    true,
@@ -143,12 +180,15 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 
 	// Log each entity being returned
 	for _, entity := range response.Entities {
+		// Get schema ID from either format
+		schemaId := entity.GetSchema().SchemaId
+
 		h.logger.Debug("Entity details",
 			zap.String("entity_name", entity.Name),
 			zap.String("entity_kind", entity.Kind.String()),
 			zap.String("display_name", entity.DisplayName),
 			zap.String("description", entity.Description),
-			zap.String("schema_id", entity.Schema.SchemaId),
+			zap.String("schema_id", schemaId),
 			zap.Strings("primary_key", entity.PrimaryKey),
 			zap.Bool("supports_full_table", entity.Capabilities.SupportsFullTable),
 			zap.Bool("supports_change_stream", entity.Capabilities.SupportsChangeStream),
@@ -211,6 +251,183 @@ func (h *Handler) Read(ctx context.Context, req *noesisv1.ReadRequest, stream se
 	}
 
 	return reader.Read(ctx, req, stream)
+}
+
+func buildStructuredSchema(schemaName, tableName string, columns []ColumnInfo, constraints []ConstraintInfo, indexes []IndexInfo, columnComments map[string]string) *noesisv1.StructuredSchemaDescriptor {
+	// Build field descriptors
+	fields := make([]*noesisv1.FieldDescriptor, len(columns))
+	for i, col := range columns {
+		// Get column comment if available
+		documentation := ""
+		if comment, exists := columnComments[col.Name]; exists {
+			documentation = comment
+		}
+
+		// Get default value as string
+		defaultValue := ""
+		if col.DefaultValue != nil {
+			defaultValue = *col.DefaultValue
+		}
+
+		fields[i] = &noesisv1.FieldDescriptor{
+			Name:            col.Name,
+			Type:            mapPostgreSQLTypeToFieldType(col.DataType),
+			Nullable:        col.IsNullable == "YES",
+			DefaultValue:    defaultValue,
+			Documentation:   documentation,
+			MaxLength:       int32(col.MaxLength),
+			Precision:       int32(col.Precision),
+			Scale:           int32(col.Scale),
+			OrdinalPosition: int32(col.Position),
+			Attributes:      make(map[string]string),
+		}
+
+		// Add type-specific attributes
+		if col.DataType != "" {
+			fields[i].Attributes["postgres_type"] = col.DataType
+		}
+	}
+
+	// Build constraint descriptors
+	constraintDescriptors := make([]*noesisv1.ConstraintDescriptor, len(constraints))
+	for i, constraint := range constraints {
+		constraintDesc := &noesisv1.ConstraintDescriptor{
+			Name:    constraint.Name,
+			Type:    mapPostgreSQLConstraintType(constraint.Type),
+			Columns: constraint.Columns,
+		}
+
+		// Add foreign key specific information
+		if constraint.ReferencedTable != nil {
+			constraintDesc.ReferencedTable = *constraint.ReferencedTable
+		}
+		if len(constraint.ReferencedColumns) > 0 {
+			constraintDesc.ReferencedColumns = constraint.ReferencedColumns
+		}
+		if constraint.OnDelete != nil {
+			constraintDesc.OnDelete = *constraint.OnDelete
+		}
+		if constraint.OnUpdate != nil {
+			constraintDesc.OnUpdate = *constraint.OnUpdate
+		}
+
+		// Add check constraint specific information
+		if constraint.CheckExpression != nil {
+			constraintDesc.CheckExpression = *constraint.CheckExpression
+		}
+
+		// Add documentation
+		if constraint.Documentation != nil {
+			constraintDesc.Documentation = *constraint.Documentation
+		}
+
+		constraintDesc.Attributes = make(map[string]string)
+		constraintDesc.Attributes["postgres_constraint_type"] = constraint.Type
+
+		constraintDescriptors[i] = constraintDesc
+	}
+
+	// Build index descriptors
+	indexDescriptors := make([]*noesisv1.IndexDescriptor, len(indexes))
+	for i, index := range indexes {
+		indexDesc := &noesisv1.IndexDescriptor{
+			Name:    index.Name,
+			Columns: index.Columns,
+			Unique:  index.IsUnique,
+			Type:    index.Type,
+		}
+
+		// Add condition expression for partial indexes
+		if index.ConditionExpr != nil {
+			indexDesc.Condition = *index.ConditionExpr
+		}
+
+		// Add documentation
+		if index.Documentation != nil {
+			indexDesc.Documentation = *index.Documentation
+		}
+
+		indexDesc.Attributes = make(map[string]string)
+		indexDesc.Attributes["postgres_index_type"] = index.Type
+
+		indexDescriptors[i] = indexDesc
+	}
+
+	return &noesisv1.StructuredSchemaDescriptor{
+		SchemaId:    fmt.Sprintf("%s_%s_v1", schemaName, tableName),
+		Fields:      fields,
+		Constraints: constraintDescriptors,
+		Indexes:     indexDescriptors,
+		Attributes: map[string]string{
+			"postgres_schema": schemaName,
+			"postgres_table":  tableName,
+		},
+	}
+}
+
+func mapPostgreSQLTypeToFieldType(pgType string) noesisv1.FieldType {
+	switch pgType {
+	case "integer", "int4":
+		return noesisv1.FieldType_FIELD_TYPE_INTEGER
+	case "bigint", "int8":
+		return noesisv1.FieldType_FIELD_TYPE_BIGINT
+	case "smallint", "int2":
+		return noesisv1.FieldType_FIELD_TYPE_SMALLINT
+	case "real", "float4":
+		return noesisv1.FieldType_FIELD_TYPE_FLOAT
+	case "double precision", "float8":
+		return noesisv1.FieldType_FIELD_TYPE_DOUBLE
+	case "boolean", "bool":
+		return noesisv1.FieldType_FIELD_TYPE_BOOLEAN
+	case "date":
+		return noesisv1.FieldType_FIELD_TYPE_DATE
+	case "time", "time without time zone":
+		return noesisv1.FieldType_FIELD_TYPE_TIME
+	case "timestamp", "timestamp without time zone":
+		return noesisv1.FieldType_FIELD_TYPE_TIMESTAMP
+	case "timestamp with time zone", "timestamptz":
+		return noesisv1.FieldType_FIELD_TYPE_TIMESTAMP_WITH_TZ
+	case "uuid":
+		return noesisv1.FieldType_FIELD_TYPE_UUID
+	case "json":
+		return noesisv1.FieldType_FIELD_TYPE_JSON
+	case "jsonb":
+		return noesisv1.FieldType_FIELD_TYPE_JSONB
+	case "numeric", "decimal":
+		return noesisv1.FieldType_FIELD_TYPE_DECIMAL
+	case "bytea":
+		return noesisv1.FieldType_FIELD_TYPE_BINARY
+	default:
+		// Handle character types
+		if strings.Contains(pgType, "varchar") || strings.Contains(pgType, "char") {
+			return noesisv1.FieldType_FIELD_TYPE_STRING
+		}
+		// Handle array types
+		if strings.Contains(pgType, "[]") {
+			return noesisv1.FieldType_FIELD_TYPE_ARRAY
+		}
+		// Handle enum types (user-defined types are often enums)
+		if !strings.Contains(pgType, " ") && pgType != "text" {
+			return noesisv1.FieldType_FIELD_TYPE_ENUM
+		}
+		// Default to text for unknown types
+		return noesisv1.FieldType_FIELD_TYPE_TEXT
+	}
+}
+
+func mapPostgreSQLConstraintType(pgConstraintType string) noesisv1.ConstraintType {
+	switch strings.ToUpper(pgConstraintType) {
+	case "PRIMARY KEY":
+		return noesisv1.ConstraintType_PRIMARY_KEY
+	case "FOREIGN KEY":
+		return noesisv1.ConstraintType_FOREIGN_KEY
+	case "UNIQUE":
+		return noesisv1.ConstraintType_UNIQUE
+	case "CHECK":
+		return noesisv1.ConstraintType_CHECK
+	default:
+		return noesisv1.ConstraintType_CONSTRAINT_TYPE_UNSPECIFIED
+	}
 }
 
 func mapPostgreSQLTypeToArrow(pgType string) string {

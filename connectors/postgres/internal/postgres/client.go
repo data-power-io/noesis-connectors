@@ -175,6 +175,260 @@ func (c *Client) GetColumns(ctx context.Context, schema, table string) ([]Column
 	return columns, nil
 }
 
+func (c *Client) GetConstraints(ctx context.Context, schema, table string) ([]ConstraintInfo, error) {
+	query := `
+		SELECT
+			tc.constraint_name,
+			tc.constraint_type,
+			array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns,
+			ccu.table_name as referenced_table,
+			array_agg(ccu.column_name ORDER BY kcu.ordinal_position) as referenced_columns,
+			rc.delete_rule as on_delete,
+			rc.update_rule as on_update,
+			cc.check_clause as check_expression,
+			obj_description(pgc.oid, 'pg_constraint') as documentation
+		FROM information_schema.table_constraints tc
+		LEFT JOIN information_schema.key_column_usage kcu
+			ON tc.constraint_name = kcu.constraint_name
+			AND tc.table_schema = kcu.table_schema
+			AND tc.table_name = kcu.table_name
+		LEFT JOIN information_schema.constraint_column_usage ccu
+			ON tc.constraint_name = ccu.constraint_name
+		LEFT JOIN information_schema.referential_constraints rc
+			ON tc.constraint_name = rc.constraint_name
+		LEFT JOIN information_schema.check_constraints cc
+			ON tc.constraint_name = cc.constraint_name
+		LEFT JOIN pg_catalog.pg_namespace pgn ON pgn.nspname = tc.table_schema
+		LEFT JOIN pg_catalog.pg_class pgcl ON pgcl.relname = tc.table_name AND pgcl.relnamespace = pgn.oid
+		LEFT JOIN pg_catalog.pg_constraint pgc ON pgc.conname = tc.constraint_name AND pgc.conrelid = pgcl.oid
+		WHERE tc.table_schema = $1 AND tc.table_name = $2
+		GROUP BY tc.constraint_name, tc.constraint_type, ccu.table_name, rc.delete_rule, rc.update_rule, cc.check_clause, pgc.oid
+		ORDER BY tc.constraint_name
+	`
+
+	rows, err := c.Query(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query constraints: %w", err)
+	}
+	defer rows.Close()
+
+	var constraints []ConstraintInfo
+	for rows.Next() {
+		var constraint ConstraintInfo
+		var refTable, onDelete, onUpdate, checkExpr, docs interface{}
+		var columns, refColumns interface{}
+
+		if err := rows.Scan(
+			&constraint.Name,
+			&constraint.Type,
+			&columns,
+			&refTable,
+			&refColumns,
+			&onDelete,
+			&onUpdate,
+			&checkExpr,
+			&docs,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan constraint: %w", err)
+		}
+
+		// Convert pgx arrays to Go slices
+		if columns != nil {
+			if colArray, ok := columns.([]interface{}); ok {
+				for _, col := range colArray {
+					if colStr, ok := col.(string); ok {
+						constraint.Columns = append(constraint.Columns, colStr)
+					}
+				}
+			}
+		}
+
+		if refColumns != nil {
+			if refArray, ok := refColumns.([]interface{}); ok {
+				for _, col := range refArray {
+					if colStr, ok := col.(string); ok {
+						constraint.ReferencedColumns = append(constraint.ReferencedColumns, colStr)
+					}
+				}
+			}
+		}
+
+		// Handle nullable fields
+		if refTable != nil {
+			if refStr, ok := refTable.(string); ok {
+				constraint.ReferencedTable = &refStr
+			}
+		}
+		if onDelete != nil {
+			if delStr, ok := onDelete.(string); ok {
+				constraint.OnDelete = &delStr
+			}
+		}
+		if onUpdate != nil {
+			if updStr, ok := onUpdate.(string); ok {
+				constraint.OnUpdate = &updStr
+			}
+		}
+		if checkExpr != nil {
+			if checkStr, ok := checkExpr.(string); ok {
+				constraint.CheckExpression = &checkStr
+			}
+		}
+		if docs != nil {
+			if docStr, ok := docs.(string); ok {
+				constraint.Documentation = &docStr
+			}
+		}
+
+		constraints = append(constraints, constraint)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating constraints: %w", err)
+	}
+
+	return constraints, nil
+}
+
+func (c *Client) GetIndexes(ctx context.Context, schema, table string) ([]IndexInfo, error) {
+	query := `
+		SELECT
+			i.relname as index_name,
+			array_agg(a.attname ORDER BY a.attnum) as columns,
+			idx.indisunique as is_unique,
+			am.amname as index_type,
+			pg_get_expr(idx.indpred, idx.indrelid) as condition_expr,
+			obj_description(i.oid, 'pg_class') as documentation
+		FROM pg_catalog.pg_index idx
+		JOIN pg_catalog.pg_class i ON i.oid = idx.indexrelid
+		JOIN pg_catalog.pg_class t ON t.oid = idx.indrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_catalog.pg_am am ON am.oid = i.relam
+		JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(idx.indkey)
+		WHERE n.nspname = $1
+		AND t.relname = $2
+		AND NOT idx.indisprimary  -- Exclude primary key indexes (handled as constraints)
+		GROUP BY i.relname, idx.indisunique, am.amname, idx.indpred, idx.indrelid, i.oid
+		ORDER BY i.relname
+	`
+
+	rows, err := c.Query(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query indexes: %w", err)
+	}
+	defer rows.Close()
+
+	var indexes []IndexInfo
+	for rows.Next() {
+		var index IndexInfo
+		var columns interface{}
+		var condExpr, docs interface{}
+
+		if err := rows.Scan(
+			&index.Name,
+			&columns,
+			&index.IsUnique,
+			&index.Type,
+			&condExpr,
+			&docs,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan index: %w", err)
+		}
+
+		// Convert pgx array to Go slice
+		if columns != nil {
+			if colArray, ok := columns.([]interface{}); ok {
+				for _, col := range colArray {
+					if colStr, ok := col.(string); ok {
+						index.Columns = append(index.Columns, colStr)
+					}
+				}
+			}
+		}
+
+		// Handle nullable fields
+		if condExpr != nil {
+			if condStr, ok := condExpr.(string); ok {
+				index.ConditionExpr = &condStr
+			}
+		}
+		if docs != nil {
+			if docStr, ok := docs.(string); ok {
+				index.Documentation = &docStr
+			}
+		}
+
+		indexes = append(indexes, index)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating indexes: %w", err)
+	}
+
+	return indexes, nil
+}
+
+func (c *Client) GetTableComment(ctx context.Context, schema, table string) (string, error) {
+	query := `
+		SELECT obj_description(pc.oid, 'pg_class') as table_comment
+		FROM pg_catalog.pg_class pc
+		JOIN pg_catalog.pg_namespace pn ON pn.oid = pc.relnamespace
+		WHERE pn.nspname = $1 AND pc.relname = $2
+	`
+
+	var comment *string
+	err := c.QueryRow(ctx, query, schema, table).Scan(&comment)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to query table comment: %w", err)
+	}
+
+	if comment != nil {
+		return *comment, nil
+	}
+	return "", nil
+}
+
+func (c *Client) GetColumnComments(ctx context.Context, schema, table string) (map[string]string, error) {
+	query := `
+		SELECT
+			a.attname as column_name,
+			col_description(a.attrelid, a.attnum) as column_comment
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1
+		AND c.relname = $2
+		AND a.attnum > 0
+		AND NOT a.attisdropped
+		AND col_description(a.attrelid, a.attnum) IS NOT NULL
+		ORDER BY a.attnum
+	`
+
+	rows, err := c.Query(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query column comments: %w", err)
+	}
+	defer rows.Close()
+
+	comments := make(map[string]string)
+	for rows.Next() {
+		var columnName, comment string
+		if err := rows.Scan(&columnName, &comment); err != nil {
+			return nil, fmt.Errorf("failed to scan column comment: %w", err)
+		}
+		comments[columnName] = comment
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating column comments: %w", err)
+	}
+
+	return comments, nil
+}
+
 func buildConnectionString(config map[string]string) string {
 	host := config["host"]
 	port := config["port"]
@@ -221,4 +475,25 @@ type ColumnInfo struct {
 	MaxLength    int
 	Precision    int
 	Scale        int
+}
+
+type ConstraintInfo struct {
+	Name               string
+	Type               string
+	Columns            []string
+	ReferencedTable    *string
+	ReferencedColumns  []string
+	OnDelete           *string
+	OnUpdate           *string
+	CheckExpression    *string
+	Documentation      *string
+}
+
+type IndexInfo struct {
+	Name              string
+	Columns           []string
+	IsUnique          bool
+	Type              string
+	ConditionExpr     *string
+	Documentation     *string
 }

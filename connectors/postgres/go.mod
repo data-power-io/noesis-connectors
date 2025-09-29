@@ -11,6 +11,8 @@ require (
 	google.golang.org/grpc v1.75.1
 )
 
+replace github.com/data-power-io/noesis-protocol/languages/go => ../../../noesis-protocol/languages/go
+
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
