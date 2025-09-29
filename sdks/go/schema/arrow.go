@@ -18,44 +18,42 @@ func NewArrowSchemaManager() *ArrowSchemaManager {
 	return &ArrowSchemaManager{}
 }
 
-// SchemaToDescriptor converts an Arrow schema to a SchemaDescriptor proto message
-func (m *ArrowSchemaManager) SchemaToDescriptor(schema *arrow.Schema, schemaID string) (*connectorv1.SchemaDescriptor, error) {
-	// Serialize schema to Arrow IPC format
-	var buf bytes.Buffer
-	writer := ipc.NewWriter(&buf, ipc.WithSchema(schema))
-
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("failed to serialize Arrow schema: %w", err)
+// SchemaToStructuredDescriptor converts an Arrow schema to a StructuredSchemaDescriptor proto message
+// Note: This creates a simplified descriptor. For full Arrow schema support, use ArrowSchemaToBytes.
+func (m *ArrowSchemaManager) SchemaToStructuredDescriptor(schema *arrow.Schema, schemaID string) (*connectorv1.StructuredSchemaDescriptor, error) {
+	// Convert Arrow schema to field descriptors
+	var fields []*connectorv1.FieldDescriptor
+	for i := 0; i < int(schema.NumFields()); i++ {
+		field := schema.Field(i)
+		fieldDescriptor := &connectorv1.FieldDescriptor{
+			Name:            field.Name,
+			Type:            m.arrowToFieldType(field.Type),
+			Nullable:        field.Nullable,
+			OrdinalPosition: int32(i + 1),
+		}
+		fields = append(fields, fieldDescriptor)
 	}
 
-	return &connectorv1.SchemaDescriptor{
+	return &connectorv1.StructuredSchemaDescriptor{
 		SchemaId: schemaID,
-		Spec: &connectorv1.SchemaDescriptor_Arrow{
-			Arrow: buf.Bytes(),
-		},
+		Fields:   fields,
 	}, nil
 }
 
-// DescriptorToSchema converts a SchemaDescriptor proto message to an Arrow schema
-func (m *ArrowSchemaManager) DescriptorToSchema(descriptor *connectorv1.SchemaDescriptor) (*arrow.Schema, error) {
-	switch spec := descriptor.Spec.(type) {
-	case *connectorv1.SchemaDescriptor_Arrow:
-		buf := bytes.NewReader(spec.Arrow)
-		reader, err := ipc.NewReader(buf)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Arrow reader: %w", err)
+// StructuredDescriptorToSchema converts a StructuredSchemaDescriptor proto message to an Arrow schema
+func (m *ArrowSchemaManager) StructuredDescriptorToSchema(descriptor *connectorv1.StructuredSchemaDescriptor) (*arrow.Schema, error) {
+	var fields []arrow.Field
+	for _, fieldDesc := range descriptor.Fields {
+		dataType := m.fieldTypeToArrow(fieldDesc.Type)
+		field := arrow.Field{
+			Name:     fieldDesc.Name,
+			Type:     dataType,
+			Nullable: fieldDesc.Nullable,
 		}
-		defer reader.Release()
-
-		return reader.Schema(), nil
-
-	case *connectorv1.SchemaDescriptor_Json:
-		// Convert JSON schema to Arrow schema
-		return m.jsonToArrowSchema(spec.Json)
-
-	default:
-		return nil, fmt.Errorf("unsupported schema specification type")
+		fields = append(fields, field)
 	}
+
+	return arrow.NewSchema(fields, nil), nil
 }
 
 // jsonToArrowSchema converts a JSON schema string to an Arrow schema
@@ -199,4 +197,85 @@ func (m *ArrowSchemaManager) arrowTypeToJSONType(arrowType arrow.DataType) strin
 	default:
 		return "string" // Default fallback
 	}
+}
+
+// arrowToFieldType converts Arrow types to FieldType enum
+func (m *ArrowSchemaManager) arrowToFieldType(arrowType arrow.DataType) connectorv1.FieldType {
+	switch arrowType.ID() {
+	case arrow.STRING, arrow.BINARY:
+		return connectorv1.FieldType_FIELD_TYPE_STRING
+	case arrow.INT32:
+		return connectorv1.FieldType_FIELD_TYPE_INTEGER
+	case arrow.INT64:
+		return connectorv1.FieldType_FIELD_TYPE_BIGINT
+	case arrow.INT16:
+		return connectorv1.FieldType_FIELD_TYPE_SMALLINT
+	case arrow.FLOAT32:
+		return connectorv1.FieldType_FIELD_TYPE_FLOAT
+	case arrow.FLOAT64:
+		return connectorv1.FieldType_FIELD_TYPE_DOUBLE
+	case arrow.BOOL:
+		return connectorv1.FieldType_FIELD_TYPE_BOOLEAN
+	case arrow.DATE32:
+		return connectorv1.FieldType_FIELD_TYPE_DATE
+	case arrow.TIMESTAMP:
+		return connectorv1.FieldType_FIELD_TYPE_TIMESTAMP
+	default:
+		return connectorv1.FieldType_FIELD_TYPE_STRING // Default fallback
+	}
+}
+
+// fieldTypeToArrow converts FieldType enum to Arrow types
+func (m *ArrowSchemaManager) fieldTypeToArrow(fieldType connectorv1.FieldType) arrow.DataType {
+	switch fieldType {
+	case connectorv1.FieldType_FIELD_TYPE_STRING, connectorv1.FieldType_FIELD_TYPE_TEXT:
+		return arrow.BinaryTypes.String
+	case connectorv1.FieldType_FIELD_TYPE_INTEGER:
+		return arrow.PrimitiveTypes.Int32
+	case connectorv1.FieldType_FIELD_TYPE_BIGINT:
+		return arrow.PrimitiveTypes.Int64
+	case connectorv1.FieldType_FIELD_TYPE_SMALLINT:
+		return arrow.PrimitiveTypes.Int16
+	case connectorv1.FieldType_FIELD_TYPE_DECIMAL:
+		return arrow.PrimitiveTypes.Float64 // Simplified mapping
+	case connectorv1.FieldType_FIELD_TYPE_FLOAT:
+		return arrow.PrimitiveTypes.Float32
+	case connectorv1.FieldType_FIELD_TYPE_DOUBLE:
+		return arrow.PrimitiveTypes.Float64
+	case connectorv1.FieldType_FIELD_TYPE_BOOLEAN:
+		return arrow.FixedWidthTypes.Boolean
+	case connectorv1.FieldType_FIELD_TYPE_DATE:
+		return arrow.FixedWidthTypes.Date32
+	case connectorv1.FieldType_FIELD_TYPE_TIME:
+		return arrow.FixedWidthTypes.Time32s
+	case connectorv1.FieldType_FIELD_TYPE_TIMESTAMP, connectorv1.FieldType_FIELD_TYPE_TIMESTAMP_WITH_TZ:
+		return arrow.FixedWidthTypes.Timestamp_ms
+	case connectorv1.FieldType_FIELD_TYPE_BINARY:
+		return arrow.BinaryTypes.Binary
+	case connectorv1.FieldType_FIELD_TYPE_UUID:
+		return arrow.BinaryTypes.String // UUIDs as strings
+	default:
+		return arrow.BinaryTypes.String // Default fallback
+	}
+}
+
+// ArrowSchemaToBytes serializes an Arrow schema to bytes for storage in payload
+func (m *ArrowSchemaManager) ArrowSchemaToBytes(schema *arrow.Schema) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to serialize Arrow schema: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ArrowSchemaFromBytes deserializes an Arrow schema from bytes
+func (m *ArrowSchemaManager) ArrowSchemaFromBytes(data []byte) (*arrow.Schema, error) {
+	buf := bytes.NewReader(data)
+	reader, err := ipc.NewReader(buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Arrow reader: %w", err)
+	}
+	defer reader.Release()
+	return reader.Schema(), nil
 }

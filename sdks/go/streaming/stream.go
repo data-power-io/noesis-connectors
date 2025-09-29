@@ -54,22 +54,13 @@ func (rs *RecordStreamer) SetBatchSize(size int) {
 	rs.batchSize = size
 }
 
-// SendSchema sends a schema message to the stream
-func (rs *RecordStreamer) SendSchema(entity string) error {
-	// Serialize Arrow schema to IPC format
-	schemaBytes, err := rs.serializeArrowSchema()
-	if err != nil {
-		return fmt.Errorf("failed to serialize schema: %w", err)
-	}
-
+// SendSchema sends a schema message to the stream using StructuredSchemaDescriptor
+func (rs *RecordStreamer) SendSchema(entity string, schema *connectorv1.StructuredSchemaDescriptor) error {
 	msg := &connectorv1.ReadMessage{
 		Msg: &connectorv1.ReadMessage_Schema{
 			Schema: &connectorv1.SchemaMsg{
-				Entity:   entity,
-				SchemaId: rs.schemaID,
-				Spec: &connectorv1.SchemaMsg_Arrow{
-					Arrow: schemaBytes,
-				},
+				Entity: entity,
+				Schema: schema,
 			},
 		},
 	}

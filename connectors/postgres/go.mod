@@ -4,14 +4,12 @@ go 1.24.0
 
 require (
 	github.com/data-power-io/noesis-connectors/sdks/go v1.0.0
-	github.com/data-power-io/noesis-protocol/languages/go v1.0.3
+	github.com/data-power-io/noesis-protocol/languages/go v1.0.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.75.1
 )
-
-replace github.com/data-power-io/noesis-protocol/languages/go => ../../../noesis-protocol/languages/go
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

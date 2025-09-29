@@ -1,9 +1,8 @@
-.PHONY: all proto build test lint clean fmt vet help install-tools
+.PHONY: all build test lint clean fmt vet help install-tools
 .PHONY: build-go build-python build-node test-go test-python test-node
 .PHONY: lint-go lint-python lint-node docs catalog
 
 # Variables
-API_DIR = api
 GO_SDK_DIR = sdks/go
 PYTHON_SDK_DIR = sdks/python
 NODE_SDK_DIR = sdks/node
@@ -11,31 +10,25 @@ DOCS_DIR = docs
 CATALOG_DIR = catalog
 
 # Default target
-all: proto build test
-
-# Generate protobuf code for all languages
-proto:
-	@echo "Generating protobuf code for all languages..."
-	@cd $(API_DIR) && buf generate
-	@echo "Protobuf generation complete"
+all: build test
 
 # Build all SDKs
 build: build-go build-python build-node
 
 # Build Go SDK
-build-go: proto
+build-go:
 	@echo "Building Go SDK..."
 	@cd $(GO_SDK_DIR) && go build ./...
 	@echo "Go SDK build complete"
 
 # Build Python SDK
-build-python: proto
+build-python:
 	@echo "Building Python SDK..."
 	@cd $(PYTHON_SDK_DIR) && python -m pip install -e .
 	@echo "Python SDK build complete"
 
 # Build Node.js SDK
-build-node: proto
+build-node:
 	@echo "Building Node.js SDK..."
 	@cd $(NODE_SDK_DIR) && npm install && npm run build
 	@echo "Node.js SDK build complete"
@@ -122,8 +115,7 @@ check: fmt vet lint test
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  all              - Generate proto and build (default)"
-	@echo "  proto            - Generate protobuf code"
+	@echo "  all              - Build (default)"
 	@echo "  build            - Build all packages"
 	@echo "  test             - Run tests"
 	@echo "  test-coverage    - Run tests with coverage"

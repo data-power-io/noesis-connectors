@@ -1,5 +1,7 @@
 github.com/data-power-io/noesis-connectors/sdks/go v1.0.0 h1:/3YS5ABNQSzZZDgu5IG7b0IlF8NChUaNmuCGWZx+81o=
 github.com/data-power-io/noesis-connectors/sdks/go v1.0.0/go.mod h1:8tcCe+b1LgaaCvw7n8PSFfku0NTkOphh5PskEg7pzpc=
+github.com/data-power-io/noesis-protocol/languages/go v1.0.4 h1:B1MV4TZJG2TWTnd+5i3kSd/WR0lO6/YnxMKKmnwtJec=
+github.com/data-power-io/noesis-protocol/languages/go v1.0.4/go.mod h1:59n+8F623M4OnQMtztyej/SAs7rfTQis8sRq4TmKcMY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
