@@ -13,14 +13,14 @@
       "support": "community"
     },
     "created": "2025-01-22T10:00:00Z",
-    "updated": "2025-09-29T14:12:58Z"
+    "updated": "2025-09-29T14:57:28Z"
   },
   "connectors": {
     "postgres": {
       "name": "postgres",
       "displayName": "PostgreSQL Source Connector",
       "description": "Extract data from PostgreSQL databases with CDC support",
-      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:5c9efdb37a743b36d9daee66a009313903890e63278a64fec98cf268b62cc4b9",
+      "image": "docker.io/benoittailhades/noesis-postgres-connector@sha256:95f84755d0402ef9e1db86d964f7969509ed1fee74e8b6d0c981c504c1faf92b",
       "semver": "1.0.0",
       "api": "connector.v1",
       "protocol": "grpc",

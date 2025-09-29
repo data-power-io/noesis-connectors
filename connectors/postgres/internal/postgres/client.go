@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -180,9 +181,9 @@ func (c *Client) GetConstraints(ctx context.Context, schema, table string) ([]Co
 		SELECT
 			tc.constraint_name,
 			tc.constraint_type,
-			array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns,
+			array_to_string(array_agg(kcu.column_name ORDER BY kcu.ordinal_position), ',') as columns,
 			ccu.table_name as referenced_table,
-			array_agg(ccu.column_name ORDER BY kcu.ordinal_position) as referenced_columns,
+			array_to_string(array_agg(ccu.column_name ORDER BY kcu.ordinal_position), ',') as referenced_columns,
 			rc.delete_rule as on_delete,
 			rc.update_rule as on_update,
 			cc.check_clause as check_expression,
@@ -216,14 +217,14 @@ func (c *Client) GetConstraints(ctx context.Context, schema, table string) ([]Co
 	for rows.Next() {
 		var constraint ConstraintInfo
 		var refTable, onDelete, onUpdate, checkExpr, docs interface{}
-		var columns, refColumns interface{}
+		var columnsStr, refColumnsStr *string
 
 		if err := rows.Scan(
 			&constraint.Name,
 			&constraint.Type,
-			&columns,
+			&columnsStr,
 			&refTable,
-			&refColumns,
+			&refColumnsStr,
 			&onDelete,
 			&onUpdate,
 			&checkExpr,
@@ -232,23 +233,25 @@ func (c *Client) GetConstraints(ctx context.Context, schema, table string) ([]Co
 			return nil, fmt.Errorf("failed to scan constraint: %w", err)
 		}
 
-		// Convert pgx arrays to Go slices
-		if columns != nil {
-			if colArray, ok := columns.([]interface{}); ok {
-				for _, col := range colArray {
-					if colStr, ok := col.(string); ok {
-						constraint.Columns = append(constraint.Columns, colStr)
-					}
+		// Parse comma-separated column strings into slices
+		if columnsStr != nil && *columnsStr != "" {
+			// Filter out NULL values that might appear in aggregated results
+			columnParts := strings.Split(*columnsStr, ",")
+			for _, col := range columnParts {
+				col = strings.TrimSpace(col)
+				if col != "" && col != "NULL" {
+					constraint.Columns = append(constraint.Columns, col)
 				}
 			}
 		}
 
-		if refColumns != nil {
-			if refArray, ok := refColumns.([]interface{}); ok {
-				for _, col := range refArray {
-					if colStr, ok := col.(string); ok {
-						constraint.ReferencedColumns = append(constraint.ReferencedColumns, colStr)
-					}
+		if refColumnsStr != nil && *refColumnsStr != "" {
+			// Filter out NULL values that might appear in aggregated results
+			refColumnParts := strings.Split(*refColumnsStr, ",")
+			for _, col := range refColumnParts {
+				col = strings.TrimSpace(col)
+				if col != "" && col != "NULL" {
+					constraint.ReferencedColumns = append(constraint.ReferencedColumns, col)
 				}
 			}
 		}
@@ -294,7 +297,7 @@ func (c *Client) GetIndexes(ctx context.Context, schema, table string) ([]IndexI
 	query := `
 		SELECT
 			i.relname as index_name,
-			array_agg(a.attname ORDER BY a.attnum) as columns,
+			array_to_string(array_agg(a.attname ORDER BY a.attnum), ',') as columns,
 			idx.indisunique as is_unique,
 			am.amname as index_type,
 			pg_get_expr(idx.indpred, idx.indrelid) as condition_expr,
@@ -321,12 +324,12 @@ func (c *Client) GetIndexes(ctx context.Context, schema, table string) ([]IndexI
 	var indexes []IndexInfo
 	for rows.Next() {
 		var index IndexInfo
-		var columns interface{}
+		var columnsStr *string
 		var condExpr, docs interface{}
 
 		if err := rows.Scan(
 			&index.Name,
-			&columns,
+			&columnsStr,
 			&index.IsUnique,
 			&index.Type,
 			&condExpr,
@@ -335,13 +338,13 @@ func (c *Client) GetIndexes(ctx context.Context, schema, table string) ([]IndexI
 			return nil, fmt.Errorf("failed to scan index: %w", err)
 		}
 
-		// Convert pgx array to Go slice
-		if columns != nil {
-			if colArray, ok := columns.([]interface{}); ok {
-				for _, col := range colArray {
-					if colStr, ok := col.(string); ok {
-						index.Columns = append(index.Columns, colStr)
-					}
+		// Parse comma-separated column string into slice
+		if columnsStr != nil && *columnsStr != "" {
+			columnParts := strings.Split(*columnsStr, ",")
+			for _, col := range columnParts {
+				col = strings.TrimSpace(col)
+				if col != "" {
+					index.Columns = append(index.Columns, col)
 				}
 			}
 		}
