@@ -213,6 +213,7 @@ func (h *Handler) OpenSession(ctx context.Context, req *noesisv1.OpenRequest) (s
 	}
 
 	h.client = client
+	h.config = config
 
 	h.logger.Info("Session opened",
 		zap.String("session_id", sessionID),
