@@ -59,7 +59,7 @@ func (h *Handler) CheckConnection(ctx context.Context, rawConfig map[string]stri
 }
 
 func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (*noesisv1.DiscoverResponse, error) {
-	h.logger.Info("Starting discovery", zap.String("tenant_id", req.TenantId))
+	h.logger.Info("Starting discovery", zap.String("tenant_id", req.TenantId), zap.String("schema", h.config["schema"]))
 
 	// Discovery requires an active session with established client connection
 	if h.client == nil {
@@ -80,53 +80,53 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 	}
 
 	for _, table := range tables {
-		columns, err := client.GetColumns(ctx, table.Schema, table.Name)
+		columns, err := client.GetColumns(ctx, schema, table.Name)
 		if err != nil {
 			h.logger.Warn("Failed to get columns for table",
-				zap.String("schema", table.Schema),
+				zap.String("schema", schema),
 				zap.String("table", table.Name),
 				zap.Error(err))
 			continue
 		}
 
 		// Get additional metadata
-		constraints, err := client.GetConstraints(ctx, table.Schema, table.Name)
+		constraints, err := client.GetConstraints(ctx, schema, table.Name)
 		if err != nil {
 			h.logger.Warn("Failed to get constraints for table",
-				zap.String("schema", table.Schema),
+				zap.String("schema", schema),
 				zap.String("table", table.Name),
 				zap.Error(err))
 			constraints = []ConstraintInfo{} // Continue with empty constraints
 		}
 
-		indexes, err := client.GetIndexes(ctx, table.Schema, table.Name)
+		indexes, err := client.GetIndexes(ctx, schema, table.Name)
 		if err != nil {
 			h.logger.Warn("Failed to get indexes for table",
-				zap.String("schema", table.Schema),
+				zap.String("schema", schema),
 				zap.String("table", table.Name),
 				zap.Error(err))
 			indexes = []IndexInfo{} // Continue with empty indexes
 		}
 
-		tableComment, err := client.GetTableComment(ctx, table.Schema, table.Name)
+		tableComment, err := client.GetTableComment(ctx, schema, table.Name)
 		if err != nil {
 			h.logger.Warn("Failed to get table comment",
-				zap.String("schema", table.Schema),
+				zap.String("schema", schema),
 				zap.String("table", table.Name),
 				zap.Error(err))
 		}
 
-		columnComments, err := client.GetColumnComments(ctx, table.Schema, table.Name)
+		columnComments, err := client.GetColumnComments(ctx, schema, table.Name)
 		if err != nil {
 			h.logger.Warn("Failed to get column comments",
-				zap.String("schema", table.Schema),
+				zap.String("schema", schema),
 				zap.String("table", table.Name),
 				zap.Error(err))
 			columnComments = make(map[string]string) // Continue with empty comments
 		}
 
 		// Build structured schema with new format
-		structuredSchema := buildStructuredSchema(table.Schema, table.Name, columns, constraints, indexes, columnComments)
+		structuredSchema := buildStructuredSchema(schema, table.Name, columns, constraints, indexes, columnComments)
 
 		// Use table comment from metadata if available, otherwise fallback to table.Comment
 		description := table.Comment
@@ -162,7 +162,7 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 
 	h.logger.Info("Discovery completed",
 		zap.String("tenant_id", req.TenantId),
-		zap.Int("schemas", 1),
+		zap.String("schema", schema),
 		zap.Int("entities", len(entities)))
 
 	// Log response details being sent back to client
