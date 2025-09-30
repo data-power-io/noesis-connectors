@@ -62,36 +62,6 @@ func (c *Client) Query(ctx context.Context, sql string, args ...interface{}) (pg
 	return c.pool.Query(ctx, sql, args...)
 }
 
-func (c *Client) GetSchemas(ctx context.Context) ([]string, error) {
-	query := `
-		SELECT schema_name
-		FROM information_schema.schemata
-		WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-		ORDER BY schema_name
-	`
-
-	rows, err := c.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query schemas: %w", err)
-	}
-	defer rows.Close()
-
-	var schemas []string
-	for rows.Next() {
-		var schema string
-		if err := rows.Scan(&schema); err != nil {
-			return nil, fmt.Errorf("failed to scan schema: %w", err)
-		}
-		schemas = append(schemas, schema)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating schemas: %w", err)
-	}
-
-	return schemas, nil
-}
-
 func (c *Client) GetTables(ctx context.Context, schema string) ([]TableInfo, error) {
 	query := `
 		SELECT
@@ -102,7 +72,7 @@ func (c *Client) GetTables(ctx context.Context, schema string) ([]TableInfo, err
 		LEFT JOIN pg_catalog.pg_namespace pn ON pn.nspname = t.table_schema
 		LEFT JOIN pg_catalog.pg_class pc ON pc.relname = t.table_name AND pc.relnamespace = pn.oid
 		WHERE t.table_schema = $1
-		AND t.table_type IN ('BASE TABLE', 'VIEW')
+		AND t.table_type IN ('BASE TABLE')
 		ORDER BY t.table_name
 	`
 
@@ -481,22 +451,22 @@ type ColumnInfo struct {
 }
 
 type ConstraintInfo struct {
-	Name               string
-	Type               string
-	Columns            []string
-	ReferencedTable    *string
-	ReferencedColumns  []string
-	OnDelete           *string
-	OnUpdate           *string
-	CheckExpression    *string
-	Documentation      *string
+	Name              string
+	Type              string
+	Columns           []string
+	ReferencedTable   *string
+	ReferencedColumns []string
+	OnDelete          *string
+	OnUpdate          *string
+	CheckExpression   *string
+	Documentation     *string
 }
 
 type IndexInfo struct {
-	Name              string
-	Columns           []string
-	IsUnique          bool
-	Type              string
-	ConditionExpr     *string
-	Documentation     *string
+	Name          string
+	Columns       []string
+	IsUnique      bool
+	Type          string
+	ConditionExpr *string
+	Documentation *string
 }

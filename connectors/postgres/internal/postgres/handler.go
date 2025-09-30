@@ -16,14 +16,13 @@ import (
 )
 
 type Handler struct {
-	config *configpkg.Config
+	config map[string]string
 	logger *zap.Logger
 	client *Client
 }
 
-func NewHandler(cfg *configpkg.Config, logger *zap.Logger) (*Handler, error) {
+func NewHandler(logger *zap.Logger) (*Handler, error) {
 	handler := &Handler{
-		config: cfg,
 		logger: logger,
 	}
 
@@ -42,6 +41,8 @@ func (h *Handler) CheckConnection(ctx context.Context, rawConfig map[string]stri
 	if err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
+
+	h.config = config
 
 	client, err := NewClient(config, h.logger)
 	if err != nil {
@@ -67,93 +68,87 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 
 	client := h.client
 
-	schemas, err := client.GetSchemas(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get schemas: %v", err)
-	}
+	schema := h.config["schema"]
 
 	var entities []*noesisv1.EntityDescriptor
 
-	for _, schema := range schemas {
-		tables, err := client.GetTables(ctx, schema)
+	tables, err := client.GetTables(ctx, schema)
+	if err != nil {
+		h.logger.Warn("Failed to get tables for schema",
+			zap.String("schema", schema),
+			zap.Error(err))
+	}
+
+	for _, table := range tables {
+		columns, err := client.GetColumns(ctx, table.Schema, table.Name)
 		if err != nil {
-			h.logger.Warn("Failed to get tables for schema",
-				zap.String("schema", schema),
+			h.logger.Warn("Failed to get columns for table",
+				zap.String("schema", table.Schema),
+				zap.String("table", table.Name),
 				zap.Error(err))
 			continue
 		}
 
-		for _, table := range tables {
-			columns, err := client.GetColumns(ctx, table.Schema, table.Name)
-			if err != nil {
-				h.logger.Warn("Failed to get columns for table",
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Name),
-					zap.Error(err))
-				continue
-			}
-
-			// Get additional metadata
-			constraints, err := client.GetConstraints(ctx, table.Schema, table.Name)
-			if err != nil {
-				h.logger.Warn("Failed to get constraints for table",
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Name),
-					zap.Error(err))
-				constraints = []ConstraintInfo{} // Continue with empty constraints
-			}
-
-			indexes, err := client.GetIndexes(ctx, table.Schema, table.Name)
-			if err != nil {
-				h.logger.Warn("Failed to get indexes for table",
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Name),
-					zap.Error(err))
-				indexes = []IndexInfo{} // Continue with empty indexes
-			}
-
-			tableComment, err := client.GetTableComment(ctx, table.Schema, table.Name)
-			if err != nil {
-				h.logger.Warn("Failed to get table comment",
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Name),
-					zap.Error(err))
-			}
-
-			columnComments, err := client.GetColumnComments(ctx, table.Schema, table.Name)
-			if err != nil {
-				h.logger.Warn("Failed to get column comments",
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Name),
-					zap.Error(err))
-				columnComments = make(map[string]string) // Continue with empty comments
-			}
-
-			// Build structured schema with new format
-			structuredSchema := buildStructuredSchema(table.Schema, table.Name, columns, constraints, indexes, columnComments)
-
-			// Use table comment from metadata if available, otherwise fallback to table.Comment
-			description := table.Comment
-			if tableComment != "" {
-				description = tableComment
-			}
-
-			entity := &noesisv1.EntityDescriptor{
-				Name:        table.Name,
-				Kind:        noesisv1.EntityKind_NODE, // PostgreSQL tables are NODE entities
-				DisplayName: table.Name,
-				Description: description,
-				Schema:      structuredSchema,
-				PrimaryKey:  getPrimaryKeyColumns(columns),
-				Capabilities: &noesisv1.ExtractionCapabilities{
-					SupportsFullTable:    true,
-					SupportsChangeStream: hasTimestampColumn(columns),
-					SupportsSubgraph:     false,
-				},
-			}
-
-			entities = append(entities, entity)
+		// Get additional metadata
+		constraints, err := client.GetConstraints(ctx, table.Schema, table.Name)
+		if err != nil {
+			h.logger.Warn("Failed to get constraints for table",
+				zap.String("schema", table.Schema),
+				zap.String("table", table.Name),
+				zap.Error(err))
+			constraints = []ConstraintInfo{} // Continue with empty constraints
 		}
+
+		indexes, err := client.GetIndexes(ctx, table.Schema, table.Name)
+		if err != nil {
+			h.logger.Warn("Failed to get indexes for table",
+				zap.String("schema", table.Schema),
+				zap.String("table", table.Name),
+				zap.Error(err))
+			indexes = []IndexInfo{} // Continue with empty indexes
+		}
+
+		tableComment, err := client.GetTableComment(ctx, table.Schema, table.Name)
+		if err != nil {
+			h.logger.Warn("Failed to get table comment",
+				zap.String("schema", table.Schema),
+				zap.String("table", table.Name),
+				zap.Error(err))
+		}
+
+		columnComments, err := client.GetColumnComments(ctx, table.Schema, table.Name)
+		if err != nil {
+			h.logger.Warn("Failed to get column comments",
+				zap.String("schema", table.Schema),
+				zap.String("table", table.Name),
+				zap.Error(err))
+			columnComments = make(map[string]string) // Continue with empty comments
+		}
+
+		// Build structured schema with new format
+		structuredSchema := buildStructuredSchema(table.Schema, table.Name, columns, constraints, indexes, columnComments)
+
+		// Use table comment from metadata if available, otherwise fallback to table.Comment
+		description := table.Comment
+		if tableComment != "" {
+			description = tableComment
+		}
+
+		entity := &noesisv1.EntityDescriptor{
+			Name:        table.Name,
+			Kind:        noesisv1.EntityKind_NODE, // PostgreSQL tables are NODE entities
+			DisplayName: table.Name,
+			Description: description,
+			Schema:      structuredSchema,
+			PrimaryKey:  getPrimaryKeyColumns(columns),
+			Capabilities: &noesisv1.ExtractionCapabilities{
+				SupportsFullTable:    true,
+				SupportsChangeStream: hasTimestampColumn(columns),
+				SupportsSubgraph:     false,
+			},
+		}
+
+		entities = append(entities, entity)
 	}
 
 	response := &noesisv1.DiscoverResponse{
@@ -167,7 +162,7 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 
 	h.logger.Info("Discovery completed",
 		zap.String("tenant_id", req.TenantId),
-		zap.Int("schemas", len(schemas)),
+		zap.Int("schemas", 1),
 		zap.Int("entities", len(entities)))
 
 	// Log response details being sent back to client

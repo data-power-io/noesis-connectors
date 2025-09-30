@@ -28,7 +28,7 @@ func main() {
 	}
 	defer logger.Sync()
 
-	handler, err := postgres.NewHandler(nil, logger)
+	handler, err := postgres.NewHandler(logger)
 	if err != nil {
 		logger.Fatal("Failed to create PostgreSQL handler", zap.Error(err))
 	}
@@ -77,7 +77,7 @@ func healthCheck() int {
 	}
 	defer logger.Sync()
 
-	handler, err := postgres.NewHandler(nil, logger)
+	handler, err := postgres.NewHandler(logger)
 	if err != nil {
 		logger.Error("Failed to create handler", zap.Error(err))
 		return 1
