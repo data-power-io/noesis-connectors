@@ -21,12 +21,14 @@ const (
 
 type Reader struct {
 	client *Client
+	config map[string]string
 	logger *zap.Logger
 }
 
-func NewReader(client *Client, logger *zap.Logger) (*Reader, error) {
+func NewReader(client *Client, config map[string]string, logger *zap.Logger) (*Reader, error) {
 	return &Reader{
 		client: client,
+		config: config,
 		logger: logger,
 	}, nil
 }
@@ -44,7 +46,7 @@ func (r *Reader) Read(ctx context.Context, req *noesisv1.ReadRequest, stream ser
 
 func (r *Reader) readFullTable(ctx context.Context, req *noesisv1.ReadRequest, fullTable *noesisv1.FullTableScan, stream server.ReadStream) error {
 	entity := fullTable.Entity
-	schema := "public" // Default schema
+	schema := r.config["schema"]
 
 	columns, err := r.client.GetColumns(ctx, schema, entity)
 	if err != nil {
@@ -74,7 +76,7 @@ func (r *Reader) readFullTable(ctx context.Context, req *noesisv1.ReadRequest, f
 
 func (r *Reader) readChangeStream(ctx context.Context, req *noesisv1.ReadRequest, changeStream *noesisv1.ChangeStream, stream server.ReadStream) error {
 	entity := changeStream.Entity
-	schema := "public" // Default schema
+	schema := r.config["schema"]
 
 	columns, err := r.client.GetColumns(ctx, schema, entity)
 	if err != nil {

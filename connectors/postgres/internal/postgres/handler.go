@@ -241,7 +241,7 @@ func (h *Handler) Read(ctx context.Context, req *noesisv1.ReadRequest, stream se
 		return status.Errorf(codes.FailedPrecondition, "no active session")
 	}
 
-	reader, err := NewReader(h.client, h.logger)
+	reader, err := NewReader(h.client, h.config, h.logger)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to create reader: %v", err)
 	}
@@ -426,35 +426,6 @@ func mapPostgreSQLConstraintType(pgConstraintType string) noesisv1.ConstraintTyp
 	}
 }
 
-func mapPostgreSQLTypeToArrow(pgType string) string {
-	switch pgType {
-	case "integer", "int4":
-		return "int32"
-	case "bigint", "int8":
-		return "int64"
-	case "smallint", "int2":
-		return "int16"
-	case "real", "float4":
-		return "float32"
-	case "double precision", "float8":
-		return "float64"
-	case "boolean", "bool":
-		return "bool"
-	case "date":
-		return "date32"
-	case "timestamp", "timestamp without time zone":
-		return "timestamp[us]"
-	case "timestamp with time zone", "timestamptz":
-		return "timestamp[us,tz=UTC]"
-	case "uuid":
-		return "string"
-	case "json", "jsonb":
-		return "string"
-	default:
-		return "string"
-	}
-}
-
 func hasTimestampColumn(columns []ColumnInfo) bool {
 	for _, col := range columns {
 		if col.DataType == "timestamp" ||
@@ -468,48 +439,6 @@ func hasTimestampColumn(columns []ColumnInfo) bool {
 	}
 	return false
 }
-
-func buildJSONSchema(columns []ColumnInfo) string {
-	// Build a simple JSON schema for the table
-	schema := `{
-		"type": "object",
-		"properties": {`
-
-	for i, col := range columns {
-		if i > 0 {
-			schema += ","
-		}
-		schema += fmt.Sprintf(`
-			"%s": {
-				"type": "%s"`, col.Name, mapPostgreSQLTypeToJSONType(col.DataType))
-
-		if col.IsNullable == "YES" {
-			schema += `, "nullable": true`
-		}
-
-		schema += "}"
-	}
-
-	schema += `
-		}
-	}`
-
-	return schema
-}
-
-func mapPostgreSQLTypeToJSONType(pgType string) string {
-	switch pgType {
-	case "integer", "int4", "bigint", "int8", "smallint", "int2":
-		return "integer"
-	case "real", "float4", "double precision", "float8":
-		return "number"
-	case "boolean", "bool":
-		return "boolean"
-	default:
-		return "string"
-	}
-}
-
 func getPrimaryKeyColumns(columns []ColumnInfo) []string {
 	// This is a simplified implementation
 	// In a real implementation, you would query the information_schema.key_column_usage
