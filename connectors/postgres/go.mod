@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/data-power-io/noesis-connectors/sdks/go v1.0.0
-	github.com/data-power-io/noesis-protocol/languages/go v1.0.4
+	github.com/data-power-io/noesis-protocol/languages/go v1.0.7
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	go.uber.org/zap v1.27.0

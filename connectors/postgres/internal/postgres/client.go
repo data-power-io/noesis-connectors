@@ -402,6 +402,87 @@ func (c *Client) GetColumnComments(ctx context.Context, schema, table string) (m
 	return comments, nil
 }
 
+// GetTableRowCount returns the estimated row count for a table from pg_class
+func (c *Client) GetTableRowCount(ctx context.Context, schema, table string) (int64, error) {
+	query := `
+		SELECT reltuples::bigint
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relname = $2
+	`
+
+	var rowCount int64
+	err := c.QueryRow(ctx, query, schema, table).Scan(&rowCount)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to query row count: %w", err)
+	}
+
+	// If statistics are stale or table is new, row count might be -1 or 0
+	if rowCount < 0 {
+		rowCount = 0
+	}
+
+	return rowCount, nil
+}
+
+// PrimaryKeyInfo contains information about a table's primary key
+type PrimaryKeyInfo struct {
+	Column   string
+	DataType string
+}
+
+// GetPrimaryKey returns the primary key information for a table
+func (c *Client) GetPrimaryKey(ctx context.Context, schema, table string) (*PrimaryKeyInfo, error) {
+	query := `
+		SELECT kcu.column_name, c.data_type
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+			ON tc.constraint_name = kcu.constraint_name
+			AND tc.table_schema = kcu.table_schema
+			AND tc.table_name = kcu.table_name
+		JOIN information_schema.columns c
+			ON c.table_schema = kcu.table_schema
+			AND c.table_name = kcu.table_name
+			AND c.column_name = kcu.column_name
+		WHERE tc.constraint_type = 'PRIMARY KEY'
+		AND tc.table_schema = $1
+		AND tc.table_name = $2
+		ORDER BY kcu.ordinal_position
+		LIMIT 1
+	`
+
+	var pkInfo PrimaryKeyInfo
+	err := c.QueryRow(ctx, query, schema, table).Scan(&pkInfo.Column, &pkInfo.DataType)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("no primary key found")
+		}
+		return nil, fmt.Errorf("failed to query primary key: %w", err)
+	}
+
+	return &pkInfo, nil
+}
+
+// GetMinMaxValue returns the minimum and maximum values for a numeric column
+func (c *Client) GetMinMaxValue(ctx context.Context, schema, table, column string) (interface{}, interface{}, error) {
+	query := fmt.Sprintf(`SELECT MIN("%s"), MAX("%s") FROM "%s"."%s"`, column, column, schema, table)
+
+	var minValue, maxValue interface{}
+	err := c.QueryRow(ctx, query).Scan(&minValue, &maxValue)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query min/max values: %w", err)
+	}
+
+	if minValue == nil || maxValue == nil {
+		return nil, nil, fmt.Errorf("min/max values are null")
+	}
+
+	return minValue, maxValue, nil
+}
+
 func buildConnectionString(config map[string]string) string {
 	host := config["host"]
 	port := config["port"]

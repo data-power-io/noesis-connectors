@@ -71,7 +71,7 @@ func (r *Reader) readFullTable(ctx context.Context, req *noesisv1.ReadRequest, f
 	}
 	defer rows.Close()
 
-	return r.streamRows(ctx, rows, columns, stream, req.SessionId)
+	return r.streamRows(ctx, rows, columns, stream, req.SessionId, entity)
 }
 
 func (r *Reader) readChangeStream(ctx context.Context, req *noesisv1.ReadRequest, changeStream *noesisv1.ChangeStream, stream server.ReadStream) error {
@@ -109,7 +109,7 @@ func (r *Reader) readChangeStream(ctx context.Context, req *noesisv1.ReadRequest
 	}
 	defer rows.Close()
 
-	return r.streamRows(ctx, rows, columns, stream, req.SessionId)
+	return r.streamRows(ctx, rows, columns, stream, req.SessionId, entity)
 }
 
 func (r *Reader) buildSelectQuery(schema, entity string, columns []ColumnInfo, cursor string) string {
@@ -148,7 +148,7 @@ func (r *Reader) buildIncrementalQuery(schema, entity string, columns []ColumnIn
 	return query
 }
 
-func (r *Reader) streamRows(ctx context.Context, rows pgx.Rows, columns []ColumnInfo, stream server.ReadStream, sessionID string) error {
+func (r *Reader) streamRows(ctx context.Context, rows pgx.Rows, columns []ColumnInfo, stream server.ReadStream, sessionID string, entity string) error {
 	recordCount := 0
 
 	for rows.Next() {
@@ -157,7 +157,7 @@ func (r *Reader) streamRows(ctx context.Context, rows pgx.Rows, columns []Column
 			return status.Errorf(codes.Internal, "failed to scan row: %v", err)
 		}
 
-		record, err := r.convertRowToRecord(values, columns)
+		record, err := r.convertRowToRecord(values, columns, entity)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to convert row: %v", err)
 		}
@@ -208,8 +208,8 @@ func (r *Reader) streamRows(ctx context.Context, rows pgx.Rows, columns []Column
 	return nil
 }
 
-func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo) (*noesisv1.RecordMsg, error) {
-	fields := make(map[string]interface{})
+func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo, entity string) (*noesisv1.RecordMsg, error) {
+	rowColumns := make(map[string]*noesisv1.Value)
 
 	for i, value := range values {
 		if i >= len(columns) {
@@ -219,56 +219,182 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo) 
 		col := columns[i]
 
 		if value == nil {
-			fields[col.Name] = nil
+			rowColumns[col.Name] = &noesisv1.Value{
+				Kind: &noesisv1.Value_NullVal{NullVal: noesisv1.NullValue_NULL_VALUE},
+			}
 		} else {
-			// Convert to appropriate type based on PostgreSQL data type
+			// Convert to appropriate typed Value based on PostgreSQL data type
 			switch col.DataType {
 			case "integer", "int4":
 				if v, ok := value.(int32); ok {
-					fields[col.Name] = v
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int32Val{Int32Val: v},
+					}
 				} else if v, ok := value.(int64); ok {
-					fields[col.Name] = int32(v)
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
+					}
 				}
 			case "bigint", "int8":
 				if v, ok := value.(int64); ok {
-					fields[col.Name] = v
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int64Val{Int64Val: v},
+					}
 				}
 			case "smallint", "int2":
 				if v, ok := value.(int16); ok {
-					fields[col.Name] = int32(v)
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
+					}
 				}
 			case "real", "float4":
 				if v, ok := value.(float32); ok {
-					fields[col.Name] = v
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_FloatVal{FloatVal: v},
+					}
 				}
 			case "double precision", "float8":
 				if v, ok := value.(float64); ok {
-					fields[col.Name] = v
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_DoubleVal{DoubleVal: v},
+					}
 				}
 			case "boolean", "bool":
 				if v, ok := value.(bool); ok {
-					fields[col.Name] = v
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_BoolVal{BoolVal: v},
+					}
 				}
 			case "date", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz":
 				if v, ok := value.(time.Time); ok {
-					fields[col.Name] = v.Format(time.RFC3339)
+					// Convert to microseconds since epoch
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_TimestampMicros{TimestampMicros: v.UnixMicro()},
+					}
 				}
 			default:
-				fields[col.Name] = fmt.Sprintf("%v", value)
+				// For any other type, convert to string
+				rowColumns[col.Name] = &noesisv1.Value{
+					Kind: &noesisv1.Value_StringVal{StringVal: fmt.Sprintf("%v", value)},
+				}
 			}
 		}
 	}
 
-	// Convert fields map to JSON payload for now
-	payloadBytes, err := json.Marshal(fields)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal fields: %w", err)
+	return &noesisv1.RecordMsg{
+		Entity: entity,
+		Op:     noesisv1.Op_UPSERT, // For full table scans, we treat everything as UPSERT
+		Data: &noesisv1.Row{
+			Columns: rowColumns,
+		},
+	}, nil
+}
+
+func (r *Reader) ReadSplit(ctx context.Context, req *noesisv1.ReadSplitRequest, stream server.ReadStream) error {
+	entity := req.Entity
+	schema := r.config["schema"]
+
+	// Decode split token
+	var splitToken SplitToken
+	if err := json.Unmarshal(req.Split.SplitToken, &splitToken); err != nil {
+		return status.Errorf(codes.InvalidArgument, "failed to decode split token: %v", err)
 	}
 
-	return &noesisv1.RecordMsg{
-		Op:      noesisv1.Op_UPSERT, // For full table scans, we treat everything as UPSERT
-		Payload: payloadBytes,
-	}, nil
+	r.logger.Info("Reading split",
+		zap.String("entity", entity),
+		zap.String("split_id", req.Split.SplitId),
+		zap.String("strategy", string(splitToken.Strategy)),
+		zap.Int("split_index", splitToken.SplitIndex))
+
+	// Get columns for the table
+	columns, err := r.client.GetColumns(ctx, schema, entity)
+	if err != nil {
+		return status.Errorf(codes.NotFound, "failed to get columns for table %s.%s: %v", schema, entity, err)
+	}
+
+	// Apply projection if specified
+	if req.Projection != nil && len(req.Projection.Columns) > 0 {
+		columns = r.filterColumns(columns, req.Projection.Columns)
+	}
+
+	// Build query based on split strategy
+	query := r.buildSplitQuery(schema, entity, columns, &splitToken)
+
+	r.logger.Debug("Executing split query", zap.String("query", query))
+
+	rows, err := r.client.Query(ctx, query)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to execute split query: %v", err)
+	}
+	defer rows.Close()
+
+	return r.streamRows(ctx, rows, columns, stream, req.Split.SplitId, entity)
+}
+
+func (r *Reader) buildSplitQuery(schema, entity string, columns []ColumnInfo, token *SplitToken) string {
+	var columnNames []string
+	for _, col := range columns {
+		columnNames = append(columnNames, fmt.Sprintf(`"%s"`, col.Name))
+	}
+
+	query := fmt.Sprintf(`SELECT %s FROM "%s"."%s"`,
+		joinStrings(columnNames, ", "), schema, entity)
+
+	// Build WHERE clause based on split strategy
+	var whereClauses []string
+
+	switch token.Strategy {
+	case SplitStrategyPrimaryKey:
+		// WHERE column >= min AND column < max
+		if token.Column != "" && token.MinValue != nil && token.MaxValue != nil {
+			whereClauses = append(whereClauses,
+				fmt.Sprintf(`"%s" >= %v AND "%s" < %v`, token.Column, token.MinValue, token.Column, token.MaxValue))
+		}
+
+	case SplitStrategyRowNumber:
+		// Will use OFFSET and LIMIT at the end
+		// No WHERE clause needed
+
+	case SplitStrategyModulo:
+		// WHERE hashtext(column::text) % modulo = split_index
+		if token.Column != "" && token.Modulo > 0 {
+			whereClauses = append(whereClauses,
+				fmt.Sprintf(`hashtext("%s"::text) %% %d = %d`, token.Column, token.Modulo, token.SplitIndex))
+		}
+	}
+
+	// Apply WHERE clauses
+	if len(whereClauses) > 0 {
+		query += " WHERE " + joinStrings(whereClauses, " AND ")
+	}
+
+	// Apply OFFSET and LIMIT for row number strategy
+	if token.Strategy == SplitStrategyRowNumber {
+		if token.Offset > 0 {
+			query += fmt.Sprintf(" OFFSET %d", token.Offset)
+		}
+		if token.Limit > 0 {
+			query += fmt.Sprintf(" LIMIT %d", token.Limit)
+		}
+	}
+
+	return query
+}
+
+func (r *Reader) filterColumns(columns []ColumnInfo, projection []string) []ColumnInfo {
+	projectionSet := make(map[string]bool)
+	for _, col := range projection {
+		projectionSet[col] = true
+	}
+
+	filtered := make([]ColumnInfo, 0, len(projection))
+	for _, col := range columns {
+		if projectionSet[col.Name] {
+			filtered = append(filtered, col)
+		}
+	}
+
+	return filtered
 }
 
 func (r *Reader) findTimestampColumn(columns []ColumnInfo) string {

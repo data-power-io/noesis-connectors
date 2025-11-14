@@ -193,6 +193,63 @@ func (h *Handler) Discover(ctx context.Context, req *noesisv1.DiscoverRequest) (
 	return response, nil
 }
 
+func (h *Handler) PlanExtraction(ctx context.Context, req *noesisv1.PlanExtractionRequest) (*noesisv1.PlanExtractionResponse, error) {
+	h.logger.Info("Planning extraction",
+		zap.String("entity", req.Entity),
+		zap.Int32("desired_parallelism", req.DesiredParallelism))
+
+	// Normalize and validate configuration
+	config, err := configpkg.NormalizeConfig(req.Config)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid configuration: %v", err)
+	}
+
+	schema := config["schema"]
+	if schema == "" {
+		schema = "public"
+	}
+
+	// Create temporary client for planning
+	client, err := NewClient(config, h.logger)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	// Verify table exists
+	columns, err := client.GetColumns(ctx, schema, req.Entity)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "failed to get columns for table %s.%s: %v", schema, req.Entity, err)
+	}
+	if len(columns) == 0 {
+		return nil, status.Errorf(codes.NotFound, "table %s.%s not found or has no columns", schema, req.Entity)
+	}
+
+	// Create splitter and generate splits
+	splitter := NewSplitter(client, h.logger)
+
+	// Use desired parallelism from request, or default to 4
+	desiredParallelism := req.DesiredParallelism
+	if desiredParallelism == 0 {
+		desiredParallelism = 4
+	}
+
+	splits, totalRows, err := splitter.GenerateSplits(ctx, schema, req.Entity, desiredParallelism)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate splits: %v", err)
+	}
+
+	h.logger.Info("Extraction plan generated",
+		zap.String("entity", req.Entity),
+		zap.Int("num_splits", len(splits)),
+		zap.Int64("total_estimated_rows", totalRows))
+
+	return &noesisv1.PlanExtractionResponse{
+		Splits:             splits,
+		TotalEstimatedRows: totalRows,
+	}, nil
+}
+
 func (h *Handler) OpenSession(ctx context.Context, req *noesisv1.OpenRequest) (string, time.Time, error) {
 	sessionID := uuid.New().String()
 	expiresAt := time.Now().Add(time.Hour)
@@ -247,6 +304,36 @@ func (h *Handler) Read(ctx context.Context, req *noesisv1.ReadRequest, stream se
 	}
 
 	return reader.Read(ctx, req, stream)
+}
+
+func (h *Handler) ReadSplit(ctx context.Context, req *noesisv1.ReadSplitRequest, stream server.ReadStream) error {
+	h.logger.Info("Starting read split operation",
+		zap.String("entity", req.Entity),
+		zap.String("split_id", req.Split.GetSplitId()))
+
+	// ReadSplit can work either with or without a session
+	// If client is already set (from Open session), use it
+	// Otherwise, we need to extract config from split token metadata
+
+	var client *Client
+	var config map[string]string
+
+	if h.client != nil {
+		// Use existing session client
+		client = h.client
+		config = h.config
+	} else {
+		// Extract config from split token metadata if available
+		// For now, we require a session to be opened first
+		return status.Errorf(codes.FailedPrecondition, "no active session - please call Open first before ReadSplit")
+	}
+
+	reader, err := NewReader(client, config, h.logger)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to create reader: %v", err)
+	}
+
+	return reader.ReadSplit(ctx, req, stream)
 }
 
 func buildStructuredSchema(schemaName, tableName string, columns []ColumnInfo, constraints []ConstraintInfo, indexes []IndexInfo, columnComments map[string]string) *noesisv1.StructuredSchemaDescriptor {

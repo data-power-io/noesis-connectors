@@ -19,6 +19,9 @@ type ConnectorHandler interface {
 	// Discover returns platform information and available entities
 	Discover(ctx context.Context, req *connectorv1.DiscoverRequest) (*connectorv1.DiscoverResponse, error)
 
+	// PlanExtraction generates extraction splits for parallel data extraction
+	PlanExtraction(ctx context.Context, req *connectorv1.PlanExtractionRequest) (*connectorv1.PlanExtractionResponse, error)
+
 	// OpenSession creates a new session for data extraction
 	OpenSession(ctx context.Context, req *connectorv1.OpenRequest) (string, time.Time, error)
 
@@ -27,6 +30,9 @@ type ConnectorHandler interface {
 
 	// Read streams data according to the specified mode
 	Read(ctx context.Context, req *connectorv1.ReadRequest, stream ReadStream) error
+
+	// ReadSplit streams data for a specific extraction split
+	ReadSplit(ctx context.Context, req *connectorv1.ReadSplitRequest, stream ReadStream) error
 }
 
 // ReadStream defines the interface for streaming data back to clients
@@ -97,6 +103,30 @@ func (s *BaseServer) Discover(ctx context.Context, req *connectorv1.DiscoverRequ
 			zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "discovery failed: %v", err)
 	}
+
+	return resp, nil
+}
+
+// PlanExtraction implements the PlanExtraction RPC method
+func (s *BaseServer) PlanExtraction(ctx context.Context, req *connectorv1.PlanExtractionRequest) (*connectorv1.PlanExtractionResponse, error) {
+	s.logger.Info("PlanExtraction request received",
+		zap.String("tenant_id", req.TenantId),
+		zap.String("entity", req.Entity),
+		zap.Int32("desired_parallelism", req.DesiredParallelism))
+
+	resp, err := s.handler.PlanExtraction(ctx, req)
+	if err != nil {
+		s.logger.Error("Plan extraction failed",
+			zap.String("tenant_id", req.TenantId),
+			zap.String("entity", req.Entity),
+			zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "plan extraction failed: %v", err)
+	}
+
+	s.logger.Info("PlanExtraction completed",
+		zap.String("entity", req.Entity),
+		zap.Int("splits_count", len(resp.Splits)),
+		zap.Int64("total_estimated_rows", resp.TotalEstimatedRows))
 
 	return resp, nil
 }
@@ -189,6 +219,28 @@ func (s *BaseServer) Read(req *connectorv1.ReadRequest, stream connectorv1.Conne
 	return nil
 }
 
+// ReadSplit implements the ReadSplit RPC method (streaming)
+func (s *BaseServer) ReadSplit(req *connectorv1.ReadSplitRequest, stream connectorv1.Connector_ReadSplitServer) error {
+	s.logger.Info("ReadSplit request received",
+		zap.String("tenant_id", req.TenantId),
+		zap.String("entity", req.Entity),
+		zap.String("split_id", req.Split.GetSplitId()))
+
+	// Wrap the gRPC stream to implement our ReadStream interface
+	streamWrapper := &grpcReadSplitStreamWrapper{stream: stream}
+
+	err := s.handler.ReadSplit(stream.Context(), req, streamWrapper)
+	if err != nil {
+		s.logger.Error("ReadSplit operation failed",
+			zap.String("entity", req.Entity),
+			zap.String("split_id", req.Split.GetSplitId()),
+			zap.Error(err))
+		return status.Errorf(codes.Internal, "read split operation failed: %v", err)
+	}
+
+	return nil
+}
+
 // grpcStreamWrapper adapts the gRPC stream to our ReadStream interface
 type grpcStreamWrapper struct {
 	stream connectorv1.Connector_ReadServer
@@ -199,6 +251,19 @@ func (w *grpcStreamWrapper) Send(msg *connectorv1.ReadMessage) error {
 }
 
 func (w *grpcStreamWrapper) Context() context.Context {
+	return w.stream.Context()
+}
+
+// grpcReadSplitStreamWrapper adapts the gRPC ReadSplit stream to our ReadStream interface
+type grpcReadSplitStreamWrapper struct {
+	stream connectorv1.Connector_ReadSplitServer
+}
+
+func (w *grpcReadSplitStreamWrapper) Send(msg *connectorv1.ReadMessage) error {
+	return w.stream.Send(msg)
+}
+
+func (w *grpcReadSplitStreamWrapper) Context() context.Context {
 	return w.stream.Context()
 }
 
