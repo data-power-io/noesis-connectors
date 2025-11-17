@@ -306,6 +306,28 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo, 
 						Kind: &noesisv1.Value_TimestampMicros{TimestampMicros: v.UnixMicro()},
 					}
 				}
+			case "numeric", "decimal":
+				// Handle PostgreSQL numeric/decimal types
+				// pgx returns these as string for precision preservation
+				var numStr string
+				switch v := value.(type) {
+				case string:
+					numStr = v
+				case float64:
+					numStr = strconv.FormatFloat(v, 'f', -1, 64)
+				case float32:
+					numStr = strconv.FormatFloat(float64(v), 'f', -1, 32)
+				default:
+					// Try to use String() method if available (for pgtype.Numeric)
+					if stringer, ok := value.(fmt.Stringer); ok {
+						numStr = stringer.String()
+					} else {
+						numStr = fmt.Sprintf("%v", value)
+					}
+				}
+				rowColumns[col.Name] = &noesisv1.Value{
+					Kind: &noesisv1.Value_StringVal{StringVal: numStr},
+				}
 			default:
 				// For any other type, convert to string
 				rowColumns[col.Name] = &noesisv1.Value{
