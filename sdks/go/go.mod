@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/apache/arrow/go/v18 v18.0.0-20241007013041-ab95a4d25142
-	github.com/data-power-io/noesis-protocol/languages/go v1.0.4
+	github.com/data-power-io/noesis-protocol/languages/go v1.0.7
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.75.1
 )
