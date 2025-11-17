@@ -10,6 +10,7 @@ import (
 	"github.com/data-power-io/noesis-connectors/sdks/go/server"
 	noesisv1 "github.com/data-power-io/noesis-protocol/languages/go/datapower/noesis/v1"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -308,9 +309,20 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo, 
 				}
 			case "numeric", "decimal":
 				// Handle PostgreSQL numeric/decimal types
-				// pgx returns these as string for precision preservation
 				var numStr string
 				switch v := value.(type) {
+				case pgtype.Numeric:
+					// Convert pgtype.Numeric to string using Float64Value
+					if v.Valid {
+						if f64, err := v.Float64Value(); err == nil {
+							numStr = strconv.FormatFloat(f64.Float64, 'f', -1, 64)
+						} else {
+							// Fallback
+							numStr = "0"
+						}
+					} else {
+						numStr = ""
+					}
 				case string:
 					numStr = v
 				case float64:
@@ -318,12 +330,8 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo, 
 				case float32:
 					numStr = strconv.FormatFloat(float64(v), 'f', -1, 32)
 				default:
-					// Try to use String() method if available (for pgtype.Numeric)
-					if stringer, ok := value.(fmt.Stringer); ok {
-						numStr = stringer.String()
-					} else {
-						numStr = fmt.Sprintf("%v", value)
-					}
+					// Last resort fallback
+					numStr = fmt.Sprintf("%v", value)
 				}
 				rowColumns[col.Name] = &noesisv1.Value{
 					Kind: &noesisv1.Value_StringVal{StringVal: numStr},
