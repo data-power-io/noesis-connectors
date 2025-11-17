@@ -234,17 +234,51 @@ func (r *Reader) convertRowToRecord(values []interface{}, columns []ColumnInfo, 
 					rowColumns[col.Name] = &noesisv1.Value{
 						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
 					}
+				} else if v, ok := value.(int); ok {
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
+					}
+				} else {
+					// Fallback: try to parse as string if numeric conversion fails
+					r.logger.Warn("Unexpected type for integer column, using default handler",
+						zap.String("column", col.Name),
+						zap.String("type", fmt.Sprintf("%T", value)))
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_StringVal{StringVal: fmt.Sprintf("%v", value)},
+					}
 				}
 			case "bigint", "int8":
 				if v, ok := value.(int64); ok {
 					rowColumns[col.Name] = &noesisv1.Value{
 						Kind: &noesisv1.Value_Int64Val{Int64Val: v},
 					}
+				} else if v, ok := value.(int); ok {
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int64Val{Int64Val: int64(v)},
+					}
+				} else {
+					r.logger.Warn("Unexpected type for bigint column, using default handler",
+						zap.String("column", col.Name),
+						zap.String("type", fmt.Sprintf("%T", value)))
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_StringVal{StringVal: fmt.Sprintf("%v", value)},
+					}
 				}
 			case "smallint", "int2":
 				if v, ok := value.(int16); ok {
 					rowColumns[col.Name] = &noesisv1.Value{
 						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
+					}
+				} else if v, ok := value.(int); ok {
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_Int32Val{Int32Val: int32(v)},
+					}
+				} else {
+					r.logger.Warn("Unexpected type for smallint column, using default handler",
+						zap.String("column", col.Name),
+						zap.String("type", fmt.Sprintf("%T", value)))
+					rowColumns[col.Name] = &noesisv1.Value{
+						Kind: &noesisv1.Value_StringVal{StringVal: fmt.Sprintf("%v", value)},
 					}
 				}
 			case "real", "float4":
