@@ -1,0 +1,63 @@
+apiVersion: connector/v1
+kind: ConnectorManifest
+metadata:
+  name: tdp
+  displayName: TDP (Technical Data Package) Connector
+  description: Connector for extracting metadata from TDP packages stored in S3/MinIO
+  version: 1.0.0
+  tags:
+    - file-system
+    - s3
+    - technical-data
+    - manufacturing
+
+spec:
+  platform:
+    name: TDP Package
+    vendor: Custom
+    supportedVersions:
+      - "1.0"
+
+  capabilities:
+    extraction:
+      fullTable: true
+      incremental: false
+      subgraph: false
+    discovery:
+      schemas: true
+      entities: true
+      relationships: false
+    authentication:
+      - access_key
+
+  configuration:
+    required:
+      - endpoint
+      - accessKeyId
+      - secretAccessKey
+      - bucket
+      - tdpPath
+    optional:
+      - useSsl
+      - region
+
+  entities:
+    supportedTypes:
+      - bom_manifest
+      - cad_models
+      - documents
+    metadata:
+      primaryKeys: true
+      foreignKeys: false
+      indexes: false
+      constraints: false
+
+  performance:
+    batchSize: 1000
+    maxConnections: 1
+    queryTimeout: 60s
+
+  compliance:
+    dataPrivacy: []
+    security:
+      - encryption_in_transit

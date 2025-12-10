@@ -13,7 +13,7 @@
       "support": "community"
     },
     "created": "2025-01-22T10:00:00Z",
-    "updated": "2025-11-17T14:44:23Z"
+    "updated": "2025-12-10T14:22:00Z"
   },
   "connectors": {
     "postgres": {
@@ -154,11 +154,127 @@
           "memory": "1Gi"
         }
       }
+    },
+    "tdp": {
+      "name": "tdp",
+      "displayName": "TDP (Technical Data Package) Source Connector",
+      "description": "Extract metadata from Technical Data Packages (TDP) stored in S3/MinIO, including BOM manifests, CAD model metadata, and document metadata",
+      "image": "docker.io/benoittailhades/noesis-tdp-connector@sha256:87eb6e196a2182b84231d10a708a35a79a819c5f4b6fee989f6f494830f82df8",
+      "semver": "1.0.0",
+      "api": "connector.v1",
+      "protocol": "grpc",
+      "kind": "source",
+      "capabilities": {
+        "discovery": true,
+        "checkConnection": true,
+        "incremental": false,
+        "cdc": false,
+        "schema_evolution": false,
+        "partitioning": false,
+        "filtering": false,
+        "auth": [
+          "access_key"
+        ],
+        "encryption": [
+          "tls"
+        ]
+      },
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "endpoint",
+          "accessKeyId",
+          "secretAccessKey",
+          "bucket",
+          "tdpPath"
+        ],
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "S3/MinIO Endpoint",
+            "description": "S3 or MinIO server endpoint URL",
+            "examples": [
+              "minio.example.com",
+              "s3.amazonaws.com",
+              "localhost:9000"
+            ]
+          },
+          "accessKeyId": {
+            "type": "string",
+            "title": "Access Key ID",
+            "description": "S3/MinIO access key ID for authentication",
+            "minLength": 1
+          },
+          "secretAccessKey": {
+            "type": "string",
+            "title": "Secret Access Key",
+            "description": "S3/MinIO secret access key for authentication",
+            "format": "password",
+            "secret": true,
+            "minLength": 1
+          },
+          "bucket": {
+            "type": "string",
+            "title": "Bucket Name",
+            "description": "S3 bucket containing the TDP package",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+          },
+          "tdpPath": {
+            "type": "string",
+            "title": "TDP Path",
+            "description": "Path to the TDP folder within the bucket",
+            "examples": [
+              "TDP_Landing_Gear_Full_Package",
+              "packages/tdp-001"
+            ]
+          },
+          "useSsl": {
+            "type": "boolean",
+            "title": "Use SSL",
+            "description": "Use HTTPS for S3/MinIO connections",
+            "default": true
+          },
+          "region": {
+            "type": "string",
+            "title": "AWS Region",
+            "description": "AWS region for S3 (ignored for MinIO)",
+            "default": "us-east-1",
+            "examples": [
+              "us-east-1",
+              "eu-west-1",
+              "ap-southeast-1"
+            ]
+          }
+        }
+      },
+      "labels": {
+        "org.yourtool.api": "connector.v1",
+        "org.yourtool.protocol": "grpc",
+        "org.yourtool.vendor": "data-power",
+        "org.yourtool.category": "file-system",
+        "org.yourtool.tier": "stable"
+      },
+      "platforms": [
+        "linux/amd64"
+      ],
+      "docsUrl": "https://docs.noesis.dev/connectors/tdp",
+      "minRunner": "1.0.0",
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      }
     }
   },
   "annotations": {
     "catalog.noesis.io/last-refresh": "2025-01-22T10:00:00Z",
-    "catalog.noesis.io/connector-count": "1",
+    "catalog.noesis.io/connector-count": "2",
     "catalog.noesis.io/license": "Apache-2.0"
   }
 }
